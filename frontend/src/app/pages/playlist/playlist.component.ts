@@ -1,0 +1,290 @@
+import { Component, OnInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { ActivatedRoute } from '@angular/router';
+import { ApiService } from '../../core/services/api.service';
+import { PlayerService } from '../../core/services/player.service';
+import { ToastService } from '../../core/services/toast.service';
+import { Playlist, Track } from '../../models/interfaces';
+
+@Component({
+  selector: 'app-playlist',
+  standalone: true,
+  imports: [CommonModule],
+  template: `
+    <div class="page" style="padding:0">
+      
+      <!-- Hero Header -->
+      <div class="hero" *ngIf="pl">
+        <div class="hero__cover">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="currentColor" style="opacity:.5"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        </div>
+        <div class="hero__info">
+          <span class="hero__label">Playlist</span>
+          <h1 class="hero__title">{{ pl.name }}</h1>
+          <span class="hero__meta">{{ tracks.length }} música{{ tracks.length !== 1 ? 's' : '' }}</span>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <!-- Actions -->
+      <div class="actions" *ngIf="pl">
+        <button class="btn-play-all" (click)="playAll()" title="Tocar Playlist" *ngIf="tracks.length">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
+        <a [href]="api.downloadPlaylistUrl(pl.id)" download class="btn-icon" style="background: rgba(255,255,255,0.1); border-radius: 50%; width: 56px; height: 56px;" title="Baixar Playlist (ZIP)" *ngIf="tracks.length">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </a>
+        <button class="btn-icon" style="background: var(--bg-highlight); border-radius: 50%; width: 56px; height: 56px;" title="Adicionar Músicas" (click)="openAddModal()">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div>
+
+      <!-- Tracks Table -->
+      <div class="table-wrap" *ngIf="tracks.length">
+        <table class="track-table">
+          <thead>
+            <tr>
+              <th class="track-table__num">#</th>
+              <th>Título</th>
+              <th>Qualidade</th>
+              <th class="track-table__dur">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </th>
+              <th class="track-table__actions"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let t of tracks; let i = index" class="track-row" [class.is-playing]="playingId === t.id" (click)="play(t)">
+              <td class="track-table__num">
+                <span *ngIf="playingId !== t.id">{{ i + 1 }}</span>
+                <svg *ngIf="playingId === t.id" width="14" height="14" viewBox="0 0 24 24" fill="var(--accent)"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </td>
+              <td>
+                <div style="display:flex;align-items:center;gap:12px">
+                  <img [src]="t.thumbnail_url" [alt]="t.title" class="track-table__thumb" *ngIf="t.thumbnail_url">
+                  <div class="track-table__thumb" *ngIf="!t.thumbnail_url" style="display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--text-muted)">♪</div>
+                  <div style="display:flex;flex-direction:column;gap:4px">
+                    <span class="track-table__title" [class.accent]="playingId === t.id">{{ t.title }}</span>
+                    <span class="track-table__artist">{{ t.artist || 'Artista Desconhecido' }}</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="badge">{{ t.storage_type === 'mp3_zip' ? 'Alta Compressão (ZIP)' : 'MP3' }}</span>
+              </td>
+              <td class="track-table__dur">{{ format(t.duration) }}</td>
+              <td class="track-table__actions" style="display:flex; gap: 4px; align-items:center; justify-content:flex-end; padding-right: 24px; padding-top: 12px;">
+                <a [href]="api.streamUrl(t.id)" download class="btn-icon" title="Salvar no computador" (click)="$event.stopPropagation()">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </a>
+                <button class="btn-icon" title="Remover da Playlist" (click)="remove(t, $event)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="empty" *ngIf="!loading && !tracks.length && pl">
+        <p class="text-muted" style="margin-bottom:16px;">Esta playlist está vazia. Adicione músicas da Biblioteca!</p>
+        <button class="btn-primary" (click)="openAddModal()">Adicionar Músicas</button>
+      </div>
+
+      <!-- Add Music Modal -->
+      <div class="modal-overlay" *ngIf="showModal" (click)="showModal = false">
+        <div class="modal" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h3>Adicionar à Playlist</h3>
+            <button class="btn-icon" (click)="showModal = false">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="modal-list" *ngIf="allTracks.length">
+              <div class="modal-item" *ngFor="let t of allTracks">
+                <img [src]="t.thumbnail_url" class="modal-thumb" *ngIf="t.thumbnail_url">
+                <div class="modal-thumb" *ngIf="!t.thumbnail_url">♪</div>
+                <div class="modal-item-info">
+                  <div class="modal-title">{{ t.title }}</div>
+                  <div class="modal-artist">{{ t.artist }}</div>
+                </div>
+                <button class="btn-outline-small" (click)="addTrackToPlaylist(t)">Adicionar</button>
+              </div>
+            </div>
+            <div *ngIf="!allTracks.length" class="text-muted" style="text-align:center; padding: 20px;">Sua biblioteca está vazia.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  `,
+  styles: [`
+    .hero {
+      display: flex; align-items: flex-end; gap: 24px;
+      padding: 60px 32px 24px;
+      background: linear-gradient(to bottom, #4a2a2a, var(--bg-base));
+      border-bottom: 1px solid rgba(255,255,255,.05);
+      
+      &__cover {
+        width: 230px; height: 230px; border-radius: var(--radius);
+        background: linear-gradient(135deg, #2a2a2a, #1a1a1a);
+        box-shadow: 0 8px 32px rgba(0,0,0,.6);
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+      }
+      &__info { display: flex; flex-direction: column; gap: 8px; }
+      &__label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+      &__title { font-size: 64px; font-weight: 900; line-height: 1.1; letter-spacing: -2px; }
+      &__meta { font-size: 14px; color: var(--text-sub); margin-top: 8px; font-weight: 500; }
+    }
+
+    .actions { padding: 24px 32px; display: flex; gap: 16px; align-items: center; }
+    .btn-play-all {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: var(--accent); color: #000; border: none;
+      display: flex; align-items: center; justify-content: center;
+      transition: var(--trans); box-shadow: 0 8px 16px rgba(0,0,0,.3);
+      &:hover { transform: scale(1.05); background: var(--accent-hover); }
+    }
+
+    .table-wrap { padding: 0 32px 32px; }
+
+    .badge {
+      background: rgba(255,255,255,.1);
+      color: var(--text-sub);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: var(--radius-full);
+      text-transform: uppercase;
+      letter-spacing: .5px;
+    }
+    
+    .empty { padding: 40px 32px; font-size: 14px; display: flex; flex-direction: column; align-items: center; }
+    
+    .btn-primary {
+      background: var(--text); color: #000; font-weight: 700; padding: 12px 24px;
+      border-radius: var(--radius-full); border: none; cursor: pointer;
+      &:hover { transform: scale(1.04); }
+    }
+
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center;
+      z-index: 1000; padding: 20px;
+    }
+    .modal {
+      background: #2a2a3e; width: 100%; max-width: 500px; border-radius: var(--radius);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5); display: flex; flex-direction: column; max-height: 80vh;
+    }
+    .modal-header {
+      padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex;
+      justify-content: space-between; align-items: center;
+      h3 { margin: 0; font-size: 18px; }
+    }
+    .modal-body { padding: 10px 0; overflow-y: auto; }
+    .modal-item {
+      display: flex; align-items: center; gap: 12px; padding: 10px 20px;
+      transition: var(--trans);
+      &:hover { background: var(--bg-hover); }
+    }
+    .modal-thumb { width: 40px; height: 40px; border-radius: 4px; background: var(--bg-highlight); display: flex; align-items: center; justify-content: center; color: var(--text-muted); }
+    .modal-item-info { flex: 1; min-width: 0; }
+    .modal-title { font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .modal-artist { font-size: 12px; color: var(--text-sub); }
+    .btn-outline-small {
+      padding: 6px 12px; border-radius: var(--radius-full); border: 1px solid var(--border);
+      background: transparent; color: var(--text); font-size: 12px; font-weight: 600; cursor: pointer;
+      &:hover { border-color: var(--text); }
+    }
+  `]
+})
+export class PlaylistComponent implements OnInit {
+  pl: Playlist | null = null;
+  tracks: Track[] = [];
+  allTracks: Track[] = [];
+  playingId: string | null = null;
+  loading = true;
+  showModal = false;
+  currentId: string | null = null;
+
+  constructor(
+    private route: ActivatedRoute,
+    public api: ApiService,
+    private ps: PlayerService,
+    private toast: ToastService
+  ) {}
+
+  ngOnInit() {
+    this.route.paramMap.subscribe(params => {
+      const id = params.get('id');
+      if (id) {
+        this.currentId = id;
+        this.load(id);
+      }
+    });
+    this.ps.state$.subscribe(s => this.playingId = s.track?.id ?? null);
+  }
+
+  load(id: string) {
+    this.loading = true;
+    this.tracks = []; // clear previous tracks instantly to avoid visual bugs
+    this.pl = null;
+    
+    this.api.getPlaylistTracks(id).subscribe({
+      next: t => { 
+        if (this.currentId === id) {
+          this.tracks = t; 
+          this.loading = false; 
+        }
+      },
+      error: () => { 
+        if (this.currentId === id) {
+          this.toast.show('Erro ao carregar playlist', 'error'); 
+          this.loading = false; 
+        }
+      }
+    });
+    
+    this.api.getPlaylists().subscribe(pls => {
+      if (this.currentId === id) {
+        this.pl = pls.find(p => p.id === id) ?? null;
+      }
+    });
+  }
+
+  openAddModal() {
+    this.showModal = true;
+    this.api.getLibrary().subscribe(t => {
+      // Filter out tracks already in the playlist
+      const existingIds = new Set(this.tracks.map(x => x.id));
+      this.allTracks = t.filter(x => !existingIds.has(x.id));
+    });
+  }
+
+  addTrackToPlaylist(t: Track) {
+    if (!this.pl) return;
+    this.api.addToPlaylist(this.pl.id, t.id).subscribe({
+      next: () => {
+        this.toast.show(`Adicionada à playlist`, 'success');
+        this.allTracks = this.allTracks.filter(x => x.id !== t.id);
+        this.tracks.push(t);
+      },
+      error: () => this.toast.show('Erro ao adicionar', 'error')
+    });
+  }
+
+  playAll() { if (this.tracks.length) this.ps.playTrack(this.tracks[0], this.tracks); }
+  play(t: Track) { this.ps.playTrack(t, this.tracks); }
+  
+  remove(t: Track, ev: Event) {
+    ev.stopPropagation();
+    if (!this.pl) return;
+    this.api.removeFromPlaylist(this.pl.id, t.id).subscribe({
+      next: () => { this.tracks = this.tracks.filter(x => x.id !== t.id); this.toast.show('Removida da playlist'); },
+      error: () => this.toast.show('Erro ao remover', 'error')
+    });
+  }
+
+  format(s: number) { return this.ps.format(s); }
+}

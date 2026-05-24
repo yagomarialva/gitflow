@@ -1,0 +1,128 @@
+.ares-window {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: #e0e0e0;
+  border: 2px solid #0055ea;
+  border-radius: 6px 6px 0 0;
+  box-shadow: 0 0 15px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+
+.ares-titlebar {
+  background: linear-gradient(to bottom, #0058e6 0%, #3a93ff 8%, #288eff 40%, #127dff 88%, #036ffc 100%);
+  color: white;
+  padding: 4px 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'Trebuchet MS', sans-serif;
+  font-weight: bold;
+  font-size: 13px;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.7);
+  
+  .title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  
+  .controls button {
+    background: transparent;
+    border: 1px solid white;
+    color: white;
+    border-radius: 3px;
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
+    margin-left: 2px;
+    cursor: pointer;
+    box-shadow: inset 1px 1px 2px rgba(255,255,255,0.4);
+    
+    &.close {
+      background-color: #d84545;
+    }
+  }
+}
+
+.ares-toolbar {
+  padding: 8px 10px 0;
+  border-bottom: 2px solid #7f9db9;
+}
+
+.ares-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.ares-tab {
+  text-decoration: none;
+  color: #333;
+  padding: 8px 20px;
+  background: linear-gradient(to bottom, #f5f5f5, #e0e0e0);
+  border: 1px solid #889bad;
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  font-size: 13px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: inset 1px 1px 0 #fff;
+
+  &:hover {
+    background: linear-gradient(to bottom, #ffffff, #e8e8e8);
+  }
+
+  &.active {
+    background: white;
+    border-bottom: 2px solid white;
+    margin-bottom: -2px;
+    position: relative;
+    z-index: 1;
+    color: #000;
+  }
+}
+
+.ares-content {
+  flex: 1;
+  background-color: white;
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.ares-toast {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background: linear-gradient(180deg, #fdfdfd 0%, #d4e0eb 100%);
+  border: 1px solid #718bb7;
+  padding: 10px 20px;
+  border-radius: 4px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3), inset 1px 1px 0 #fff;
+  font-size: 13px;
+  color: #000;
+  z-index: 9999;
+  animation: slideIn 0.3s ease-out;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  &::before {
+    content: 'ℹ️';
+  }
+
+  &.success::before {
+    content: '✅';
+  }
+
+  &.error::before {
+    content: '❌';
+  }
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}

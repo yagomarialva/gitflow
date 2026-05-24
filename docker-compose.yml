@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ares-backend
+    ports:
+      - "8080:8080"
+      # BitTorrent P2P ports (TCP + UDP)
+      - "6881:6881"
+      - "6881:6881/udp"
+      - "6882:6882"
+      - "6882:6882/udp"
+    volumes:
+      - ./data:/app/data           # SQLite persistence
+      - ./downloads:/app/downloads # Downloaded (compressed) music files
+      - ./tmp:/app/tmp             # Temp decompressed streams (cleared on restart)
+    environment:
+      - PORT=8080
+      - DB_PATH=/app/data/ares.db
+      - DOWNLOADS_PATH=/app/downloads
+      - TMP_PATH=/app/tmp
+      - TORRENT_PORT=6881
+      # chromedp: run Chromium headless without sandbox inside Docker
+      - CHROMEDP_NO_SANDBOX=true
+      - CHROME_BIN=/usr/bin/chromium-browser
+    # Required for Chromium inside Docker
+    shm_size: '256mb'
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ares-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

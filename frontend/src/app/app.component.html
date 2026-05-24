@@ -1,0 +1,38 @@
+<div class="ares-window">
+  <div class="ares-titlebar">
+    <div class="title">
+      <img src="https://upload.wikimedia.org/wikipedia/commons/4/4d/Ares_Galaxy_logo.png" alt="Ares Logo" height="16" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 100 100\'><circle cx=\'50\' cy=\'50\' r=\'40\' fill=\'blue\'/></svg>'">
+      Ares Galaxy Clone
+    </div>
+    <div class="controls">
+      <button>_</button>
+      <button>□</button>
+      <button class="close">x</button>
+    </div>
+  </div>
+
+  <div class="ares-toolbar panel-retro">
+    <nav class="ares-tabs">
+      <a routerLink="/search" routerLinkActive="active" class="ares-tab">
+        <span class="icon">🔍</span> Search
+      </a>
+      <a routerLink="/downloads" routerLinkActive="active" class="ares-tab">
+        <span class="icon">⬇️</span> Downloads
+      </a>
+      <a routerLink="/library" routerLinkActive="active" class="ares-tab">
+        <span class="icon">📁</span> Library
+      </a>
+      <a routerLink="/player" routerLinkActive="active" class="ares-tab">
+        <span class="icon">▶️</span> Player
+      </a>
+    </nav>
+  </div>
+
+  <div class="ares-content">
+    <router-outlet></router-outlet>
+  </div>
+  
+  <div *ngIf="toastMsg" class="ares-toast" [ngClass]="toastMsg.type">
+    {{ toastMsg.message }}
+  </div>
+</div>
