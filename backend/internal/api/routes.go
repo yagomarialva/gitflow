@@ -29,6 +29,7 @@ func SetupRoutes(app *fiber.App) {
 
 	// ── Library ──────────────────────────────────────────────────────────
 	api.Get("/library", handleGetLibrary)
+	api.Put("/library/:id", handleUpdateTrack)
 	api.Delete("/library/:id", handleDeleteTrack)
 
 	// ── Streaming (decompresses zip on-the-fly) ───────────────────────────
@@ -43,16 +44,55 @@ func SetupRoutes(app *fiber.App) {
 	api.Post("/playlists/:id/tracks", handleAddToPlaylist)
 	api.Delete("/playlists/:id/tracks/:tid", handleRemoveFromPlaylist)
 	api.Get("/playlists/:id/download", handleDownloadPlaylist)
-}
 
+	// ── Audiobooks ────────────────────────────────────────────────────────
+	api.Get("/audiobooks", handleGetAudiobooks)
+	api.Put("/audiobooks/:id/progress", handleUpdateAudiobookProgress)
+	api.Delete("/audiobooks/:id", handleDeleteAudiobook)
+}
 // ─── Search ──────────────────────────────────────────────────────────────────
 
 func handleSearch(c *fiber.Ctx) error {
 	q := c.Query("q")
+	searchType := c.Query("type", "music")
 	if q == "" {
 		return c.Status(400).JSON(fiber.Map{"error": "Missing search query"})
 	}
-	results := core.SearchYouTube(q)
+
+	var results []models.SearchResult
+	if searchType == "audiobook" {
+		// Aggregate from multiple sources concurrently
+		ch := make(chan []models.SearchResult, 4)
+		
+		go func() { ch <- core.SearchLibriVox(q) }()
+		go func() { ch <- core.SearchPodcasts(q) }()
+		go func() { ch <- core.SearchYouTube(q, "audiobook") }()
+		go func() {
+			var tpb []models.SearchResult
+			magnet, err := core.ScrapeTPBForAudiobook(c.Context(), q)
+			if err == nil && magnet != "" {
+				tpb = append(tpb, models.SearchResult{
+					ID:        magnet,
+					Title:     q,
+					Artist:    "Audiobook (The Pirate Bay)",
+					Duration:  0,
+					SourceURL: magnet,
+				})
+			}
+			ch <- tpb
+		}()
+
+		// Collect results
+		for i := 0; i < 4; i++ {
+			res := <-ch
+			results = append(results, res...)
+		}
+	} else if searchType == "playlist" {
+		results = core.SearchYouTube(q, "playlist")
+	} else {
+		results = core.SearchYouTube(q, "music")
+	}
+
 	if results == nil {
 		results = []models.SearchResult{}
 	}
@@ -71,7 +111,7 @@ func handleStartDownload(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
 	}
-	dl, err := core.AddDownload(req.Title, req.SourceURL)
+	dl, err := core.AddDownload(req.Title, req.SourceURL, "")
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{"error": "Failed to queue download"})
 	}
@@ -136,6 +176,23 @@ func handleGetLibrary(c *fiber.Ctx) error {
 		tracks = []models.Track{}
 	}
 	return c.JSON(tracks)
+}
+
+func handleUpdateTrack(c *fiber.Ctx) error {
+	id := c.Params("id")
+	var req struct {
+		Title  string `json:"title"`
+		Artist string `json:"artist"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid request"})
+	}
+
+	_, err := db.DB.Exec("UPDATE library_tracks SET title=?, artist=? WHERE id=?", req.Title, req.Artist, id)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(fiber.Map{"success": true})
 }
 
 func handleDeleteTrack(c *fiber.Ctx) error {
@@ -288,3 +345,53 @@ func handleDownloadPlaylist(c *fiber.Ctx) error {
 	})(c)
 }
 
+// ─── Audiobooks ───────────────────────────────────────────────────────────────
+
+func handleGetAudiobooks(c *fiber.Ctx) error {
+	rows, err := db.DB.Query(`
+		SELECT id, title, author, COALESCE(duration,0), COALESCE(resume_time,0),
+		       file_path, COALESCE(thumbnail_url,''), storage_type, added_at
+		FROM audiobooks ORDER BY added_at DESC`)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	defer rows.Close()
+
+	var list []models.Audiobook
+	for rows.Next() {
+		var a models.Audiobook
+		if err := rows.Scan(&a.ID, &a.Title, &a.Author, &a.Duration, &a.ResumeTime,
+			&a.FilePath, &a.ThumbnailURL, &a.StorageType, &a.AddedAt); err != nil {
+			continue
+		}
+		list = append(list, a)
+	}
+	if list == nil {
+		list = []models.Audiobook{}
+	}
+	return c.JSON(list)
+}
+
+type updateProgressReq struct {
+	ResumeTime int `json:"resume_time"`
+}
+
+func handleUpdateAudiobookProgress(c *fiber.Ctx) error {
+	var req updateProgressReq
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{"error": "invalid body"})
+	}
+	_, err := db.DB.Exec("UPDATE audiobooks SET resume_time=? WHERE id=?", req.ResumeTime, c.Params("id"))
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(fiber.Map{"success": true})
+}
+
+func handleDeleteAudiobook(c *fiber.Ctx) error {
+	_, err := db.DB.Exec("DELETE FROM audiobooks WHERE id=?", c.Params("id"))
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.SendStatus(204)
+}

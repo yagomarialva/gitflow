@@ -47,30 +47,26 @@ import { Track, Playlist } from '../../models/interfaces';
             </td>
             <td class="track-table__dur">{{ format(t.duration) }}</td>
             <td class="track-table__actions" style="position:relative; display:flex; gap: 4px; align-items:center; justify-content:flex-end; padding-right: 24px; padding-top: 12px;">
-              <a [href]="api.streamUrl(t.id)" download class="btn-icon" title="Salvar no computador" (click)="$event.stopPropagation()">
+              <a [href]="api.streamUrl(t.id)" download class="btn-icon" title="Baixar MP3 / Salvar local" (click)="$event.stopPropagation()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               </a>
-              <button class="btn-icon" title="Opções" (click)="toggleMenu(t.id, $event)">
+              <button class="btn-icon" title="Editar Metadados" (click)="edit(t, $event)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+              </button>
+              <button class="btn-icon" title="Opções de Playlist" (click)="toggleMenu(t.id, $event)">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+              </button>
+              <button class="btn-icon" title="Remover da Biblioteca" (click)="remove(t, $event)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff4444" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
               
               <!-- Dropdown menu -->
               <div class="dropdown-menu" *ngIf="activeMenu === t.id" (click)="$event.stopPropagation()">
-                <a [href]="api.streamUrl(t.id)" download class="dropdown-item" (click)="activeMenu = null">
-                  <div class="dropdown-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
-                  Baixar (Salvar no PC)
-                </a>
-                <div class="dropdown-header" style="margin-top: 8px;">Adicionar à Playlist</div>
+                <div class="dropdown-header">Adicionar à Playlist</div>
                 <div class="dropdown-item" *ngFor="let p of playlists" (click)="addToPlaylist(p, t)">
                   <div class="dropdown-icon" style="font-size:14px; padding-bottom: 2px;">♪</div> {{ p.name }}
                 </div>
                 <div class="dropdown-empty" *ngIf="!playlists.length">Nenhuma playlist criada.</div>
-                
-                <div style="height: 1px; background: var(--border); margin: 8px 0;"></div>
-                <div class="dropdown-item text-danger" (click)="remove(t, $event)">
-                  <div class="dropdown-icon" style="color: #ff4444;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
-                  Remover da Biblioteca
-                </div>
               </div>
             </td>
           </tr>
@@ -158,9 +154,29 @@ export class LibraryComponent implements OnInit {
   remove(t: Track, ev: Event) {
     ev.stopPropagation();
     this.activeMenu = null;
-    this.api.deleteTrack(t.id).subscribe({
-      next: () => { this.tracks = this.tracks.filter(x => x.id !== t.id); this.toast.show('Removida da biblioteca'); },
-      error: () => this.toast.show('Erro ao remover', 'error')
+    if (confirm(`Excluir "${t.title}" da biblioteca?`)) {
+      this.api.deleteTrack(t.id).subscribe({
+        next: () => { this.tracks = this.tracks.filter(x => x.id !== t.id); this.toast.show('Removida da biblioteca'); },
+        error: () => this.toast.show('Erro ao remover', 'error')
+      });
+    }
+  }
+
+  edit(t: Track, ev: Event) {
+    ev.stopPropagation();
+    this.activeMenu = null;
+    const newTitle = prompt('Editar Título da Música:', t.title);
+    if (newTitle === null) return;
+    const newArtist = prompt('Editar Artista da Música:', t.artist);
+    if (newArtist === null) return;
+    
+    this.api.updateTrack(t.id, newTitle, newArtist).subscribe({
+      next: () => {
+        t.title = newTitle;
+        t.artist = newArtist;
+        this.toast.show('Música atualizada', 'success');
+      },
+      error: () => this.toast.show('Erro ao atualizar música', 'error')
     });
   }
 

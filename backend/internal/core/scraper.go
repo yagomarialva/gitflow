@@ -27,19 +27,45 @@ import (
 
 // SearchYouTube searches YouTube using a priority chain:
 // chromedp → yt-dlp → iTunes fallback.
-func SearchYouTube(query string) []models.SearchResult {
-	log.Printf("[search] Query: %q", query)
+func SearchYouTube(query string, searchType string) []models.SearchResult {
+	// If query is a YouTube search URL, extract the actual query parameter
+	if strings.Contains(query, "youtube.com/results") {
+		if u, err := url.Parse(query); err == nil {
+			if sq := u.Query().Get("search_query"); sq != "" {
+				query = sq
+			}
+		}
+	}
 
-	// 1. Try chromedp (headless browser)
-	results, err := searchWithChromedp(query)
+	if searchType == "playlist" {
+		if !strings.Contains(strings.ToLower(query), "playlist") {
+			query = query + " playlist"
+		}
+	} else if searchType == "audiobook" {
+		if !strings.Contains(strings.ToLower(query), "audiobook") && !strings.Contains(strings.ToLower(query), "audiolivro") {
+			query = query + " audiobook"
+		}
+	}
+	log.Printf("[search] Query: %q (type: %s)", query, searchType)
+
+	// 1. Try chromedp (headless browser) with filter
+	results, err := searchWithChromedp(query, searchType, true)
 	if err == nil && len(results) > 0 {
 		log.Printf("[search] chromedp returned %d results", len(results))
 		return results
 	}
-	log.Printf("[search] chromedp failed (%v), trying yt-dlp", err)
+	log.Printf("[search] chromedp with filter failed/empty (%v). Retrying without filter.", err)
+
+	// Retry without filter
+	results, err = searchWithChromedp(query, searchType, false)
+	if err == nil && len(results) > 0 {
+		log.Printf("[search] chromedp (no filter) returned %d results", len(results))
+		return results
+	}
+	log.Printf("[search] chromedp (no filter) failed/empty (%v), trying yt-dlp", err)
 
 	// 2. Try yt-dlp
-	results, err = searchWithYtDlp(query)
+	results, err = searchWithYtDlp(query, searchType)
 	if err == nil && len(results) > 0 {
 		log.Printf("[search] yt-dlp returned %d results", len(results))
 		return results
@@ -52,7 +78,7 @@ func SearchYouTube(query string) []models.SearchResult {
 
 // ─── Tier 1: chromedp ─────────────────────────────────────────────────────────
 
-func searchWithChromedp(query string) ([]models.SearchResult, error) {
+func searchWithChromedp(query string, searchType string, useFilter bool) ([]models.SearchResult, error) {
 	opts := []chromedp.ExecAllocatorOption{
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
@@ -80,6 +106,9 @@ func searchWithChromedp(query string) ([]models.SearchResult, error) {
 	defer cancel3()
 
 	searchURL := fmt.Sprintf("https://www.youtube.com/results?search_query=%s", url.QueryEscape(query))
+	if searchType == "playlist" && useFilter {
+		searchURL += "&sp=EgIQAw==" // Filter by Playlist
+	}
 
 	// Selectors for YouTube search result items
 	type ytItem struct {
@@ -92,38 +121,157 @@ func searchWithChromedp(query string) ([]models.SearchResult, error) {
 
 	var rawItems []ytItem
 
-	// JavaScript to extract video data from YouTube search results
+	// JavaScript to extract data from YouTube search results (handles both videos and playlists)
 	script := `
 	(function() {
 		const items = [];
-		const renderers = document.querySelectorAll('ytd-video-renderer');
-		renderers.forEach((r, i) => {
-			if (i >= 15) return;
-			const title = r.querySelector('#video-title');
-			const channel = r.querySelector('#channel-name a, .ytd-channel-name a');
-			const duration = r.querySelector('ytd-thumbnail-overlay-time-status-renderer span');
-			const thumb = r.querySelector('ytd-thumbnail img');
-			if (!title) return;
+		const isPlaylistSearch = window.location.href.includes('sp=EgIQAw');
+		
+		const renderers = document.querySelectorAll('ytd-video-renderer, ytd-playlist-renderer, yt-lockup-view-model');
+		
+		renderers.forEach((r) => {
+			if (items.length >= 15) return;
+			
+			const tagName = r.tagName.toLowerCase();
+			let url = '';
+			let title = '';
+			let channel = '';
+			let thumbnail = '';
+			let duration = '';
+			let isPlaylist = false;
+			
+			if (tagName === 'yt-lockup-view-model') {
+				const metadataEl = r.querySelector('yt-lockup-metadata-view-model');
+				const linkEl = metadataEl ? metadataEl.querySelector('a') : r.querySelector('h3 a');
+				if (!linkEl) return;
+				
+				isPlaylist = (linkEl.getAttribute('href') || '').includes('list=');
+				
+				if (isPlaylistSearch !== isPlaylist) return;
+				
+				const aEl = r.querySelector('a.yt-core-image--loaded, a[href]');
+				url = aEl ? ('https://www.youtube.com' + (aEl.getAttribute('href') || '')) : '';
+				
+				if (isPlaylist && url.includes('list=')) {
+					try {
+						const urlObj = new URL(url);
+						const listId = urlObj.searchParams.get('list');
+						if (listId) {
+							url = 'https://www.youtube.com/playlist?list=' + listId;
+						}
+					} catch(e) {}
+				}
+				
+				title = linkEl.textContent.trim();
+				
+				const channelEl = r.querySelector('a[href*="/channel/"], a[href*="/@"]');
+				channel = channelEl ? channelEl.textContent.trim() : '';
+				
+				const imgEl = r.querySelector('img');
+				thumbnail = imgEl ? (imgEl.getAttribute('src') || imgEl.getAttribute('data-thumb') || '') : '';
+				
+				if (isPlaylist) {
+					const badgeEl = r.querySelector('yt-thumbnail-overlay-badge-view-model, badge-shape');
+					duration = badgeEl ? badgeEl.textContent.trim() : 'Playlist';
+				} else {
+					const durEl = r.querySelector('yt-thumbnail-overlay-time-status-renderer, span.ytd-thumbnail-overlay-time-status-renderer');
+					duration = durEl ? durEl.textContent.trim() : '';
+				}
+			} else {
+				isPlaylist = (tagName === 'ytd-playlist-renderer');
+				if (isPlaylistSearch !== isPlaylist) return;
+				
+				const titleEl = r.querySelector('#video-title');
+				if (!titleEl) return;
+				
+				title = titleEl.textContent.trim();
+				url = 'https://www.youtube.com' + (titleEl.getAttribute('href') || '');
+				
+				if (isPlaylist && url.includes('list=')) {
+					try {
+						const urlObj = new URL(url);
+						const listId = urlObj.searchParams.get('list');
+						if (listId) {
+							url = 'https://www.youtube.com/playlist?list=' + listId;
+						}
+					} catch(e) {}
+				}
+				
+				const channelEl = r.querySelector('#channel-name a, .ytd-channel-name a');
+				channel = channelEl ? channelEl.textContent.trim() : '';
+				
+				const thumbEl = r.querySelector('ytd-thumbnail img, ytd-playlist-thumbnail img');
+				thumbnail = thumbEl ? (thumbEl.getAttribute('src') || thumbEl.getAttribute('data-thumb') || '') : '';
+				
+				if (!isPlaylist) {
+					const durEl = r.querySelector('ytd-thumbnail-overlay-time-status-renderer span');
+					duration = durEl ? durEl.textContent.trim() : '';
+				} else {
+					const countEl = r.querySelector('ytd-thumbnail-overlay-side-panel-renderer span');
+					duration = countEl ? countEl.textContent.trim() : 'Playlist';
+				}
+			}
+			
 			items.push({
-				title:     title.textContent.trim(),
-				url:       'https://www.youtube.com' + (title.getAttribute('href') || ''),
-				channel:   channel ? channel.textContent.trim() : '',
-				duration:  duration ? duration.textContent.trim() : '',
-				thumbnail: thumb ? (thumb.getAttribute('src') || thumb.getAttribute('data-thumb') || '') : '',
+				title:     title,
+				url:       url,
+				channel:   channel,
+				duration:  duration,
+				thumbnail: thumbnail
 			});
 		});
+		
 		return JSON.stringify(items);
 	})()
 	`
+	isPlaylistSearchStr := "false"
+	if searchType == "playlist" {
+		isPlaylistSearchStr = "true"
+	}
+	script = strings.ReplaceAll(script, "window.location.href.includes('sp=EgIQAw')", isPlaylistSearchStr)
 
 	var resultJSON string
+	var finalURL string
+	var pageTitle string
+	var htmlContent string
+
+	log.Printf("[search] Navigating to: %s", searchURL)
 	err := chromedp.Run(timeoutCtx,
 		chromedp.Navigate(searchURL),
-		chromedp.WaitVisible(`ytd-video-renderer`, chromedp.ByQuery),
+		chromedp.Location(&finalURL),
+		chromedp.Title(&pageTitle),
+	)
+	if err != nil {
+		log.Printf("[search] chromedp navigation failed: %v", err)
+		return nil, err
+	}
+	log.Printf("[search] Landed on URL: %s, Title: %q", finalURL, pageTitle)
+
+	// Wait for renderer elements (handles legacy Polymer elements, new Lit view models, or main content wrapper)
+	targetSelector := "ytd-video-renderer, ytd-playlist-renderer, yt-lockup-view-model, #content"
+	err = chromedp.Run(timeoutCtx,
+		chromedp.WaitVisible(targetSelector, chromedp.ByQuery),
+	)
+	if err != nil {
+		var debugCtx context.Context
+		var debugCancel context.CancelFunc
+		debugCtx, debugCancel = context.WithTimeout(ctx, 5*time.Second)
+		_ = chromedp.Run(debugCtx, chromedp.OuterHTML("html", &htmlContent))
+		debugCancel()
+
+		limit := 1000
+		if len(htmlContent) < limit {
+			limit = len(htmlContent)
+		}
+		log.Printf("[search] WaitVisible failed. Page HTML snippet: %s", htmlContent[:limit])
+		return nil, fmt.Errorf("wait visible: %w", err)
+	}
+
+	err = chromedp.Run(timeoutCtx,
 		chromedp.EvaluateAsDevTools(script, &resultJSON),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("chromedp run: %w", err)
+		return nil, fmt.Errorf("chromedp run script: %w", err)
 	}
 
 	if err := json.Unmarshal([]byte(resultJSON), &rawItems); err != nil {
@@ -165,8 +313,12 @@ type ytDlpEntry struct {
 	WebpageURL string `json:"webpage_url"`
 }
 
-func searchWithYtDlp(query string) ([]models.SearchResult, error) {
-	target := fmt.Sprintf("ytsearch12:%s", query)
+func searchWithYtDlp(query string, searchType string) ([]models.SearchResult, error) {
+	prefix := "ytsearch12"
+	if searchType == "playlist" {
+		prefix = "ytsearchplaylist12"
+	}
+	target := fmt.Sprintf("%s:%s", prefix, query)
 	cmd := exec.Command("yt-dlp",
 		target,
 		"--dump-json",
@@ -197,13 +349,23 @@ func searchWithYtDlp(query string) ([]models.SearchResult, error) {
 		if ch != "" && artist == "" {
 			artist = ch
 		}
+		
+		urlStr := e.WebpageURL
+		if urlStr == "" && e.ID != "" {
+			if searchType == "playlist" {
+				urlStr = "https://www.youtube.com/playlist?list=" + e.ID
+			} else {
+				urlStr = "https://www.youtube.com/watch?v=" + e.ID
+			}
+		}
+		
 		results = append(results, models.SearchResult{
 			ID:           uuid.New().String(),
 			Title:        song,
 			Artist:       artist,
 			ThumbnailURL: e.Thumbnail,
 			Duration:     int(e.Duration),
-			SourceURL:    e.WebpageURL,
+			SourceURL:    urlStr,
 			FileSize:     "~4-8 MB",
 		})
 	}

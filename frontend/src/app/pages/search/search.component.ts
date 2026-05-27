@@ -24,6 +24,11 @@ import { SearchResult } from '../../models/interfaces';
           placeholder="O que você quer ouvir? (Nome da música ou link do YouTube)"
           autofocus
         >
+        <select class="search-box__select" name="type" [(ngModel)]="searchType">
+          <option value="music">Música</option>
+          <option value="playlist">Playlist</option>
+          <option value="audiobook">Audiolivro</option>
+        </select>
         <button type="submit" class="btn btn-accent" style="padding: 12px 24px" [disabled]="loading || !query.trim()">
           {{ loading ? 'Buscando...' : 'Buscar' }}
         </button>
@@ -80,6 +85,14 @@ import { SearchResult } from '../../models/interfaces';
         font-size: 15px; outline: none;
         &::placeholder { color: var(--text-sub); }
       }
+
+      &__select {
+        background: #333; color: var(--text); border: none; 
+        padding: 6px 12px; border-radius: 6px; outline: none;
+        cursor: pointer; font-size: 14px;
+        transition: background 0.2s;
+        &:hover { background: #444; }
+      }
     }
 
     .results {
@@ -134,6 +147,7 @@ import { SearchResult } from '../../models/interfaces';
 })
 export class SearchComponent {
   query = '';
+  searchType = 'music';
   lastQuery = '';
   results: SearchResult[] = [];
   loading = false;
@@ -143,15 +157,21 @@ export class SearchComponent {
   constructor(private api: ApiService, private toast: ToastService) {}
 
   search() {
-    const q = this.query.trim();
+    let q = this.query.trim();
     if (!q || this.loading) return;
+
+    if (q.includes('youtube.com/') && q.includes('list=')) {
+      this.searchType = 'playlist';
+    } else if (q.toLowerCase().includes('playlist')) {
+      this.searchType = 'playlist';
+    }
     
     this.loading = true;
     this.searched = true;
     this.lastQuery = q;
     this.results = [];
 
-    this.api.search(q).subscribe({
+    this.api.search(q, this.searchType).subscribe({
       next: r => {
         this.results = r || [];
         this.loading = false;

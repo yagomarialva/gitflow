@@ -8,6 +8,8 @@ export interface Track {
   thumbnail_url: string;
   storage_type: string;
   added_at: string;
+  resume_time?: number;
+  is_audiobook?: boolean;
 }
 
 export interface Download {
@@ -38,6 +40,19 @@ export interface Playlist {
   id: string;
   name: string;
   created_at: string;
+}
+
+export interface Audiobook {
+  id: string;
+  title: string;
+  author: string;
+  duration: number;
+  resume_time: number;
+  file_path: string;
+  thumbnail_url: string;
+  source_url: string;
+  status: string;
+  added_at: string;
 }
 
 export interface PlayerState {

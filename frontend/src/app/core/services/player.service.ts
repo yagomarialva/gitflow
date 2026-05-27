@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 import { PlayerState, Track } from '../../models/interfaces';
+import { ApiService } from './api.service';
 
 const DEFAULT_STATE: PlayerState = {
   track: null,
@@ -24,12 +25,41 @@ export class PlayerService {
   // Legacy compat — components that subscribe to currentTrack$
   get currentTrack$() { return new BehaviorSubject(this._state.value.track).asObservable(); }
 
-  constructor() {
+  private lastSyncTime = 0;
+  private lastSyncSeconds = 0;
+
+  constructor(private api: ApiService) {
     this.audio.volume = DEFAULT_STATE.volume;
-    this.audio.ontimeupdate = () => this.patch({ currentTime: this.audio.currentTime });
+    this.audio.ontimeupdate = () => this.handleTimeUpdate();
     this.audio.ondurationchange = () => this.patch({ duration: this.audio.duration || 0 });
     this.audio.onended = () => this.handleEnded();
     this.audio.onerror = () => this.patch({ isPlaying: false });
+    
+    // Once audio is ready, apply resume time if applicable
+    this.audio.onloadedmetadata = () => {
+      const track = this.snap.track;
+      if (track?.is_audiobook && track.resume_time && track.resume_time > 0) {
+        this.audio.currentTime = track.resume_time;
+      }
+    };
+  }
+
+  private handleTimeUpdate() {
+    const currentTime = this.audio.currentTime;
+    this.patch({ currentTime });
+
+    const track = this.snap.track;
+    if (track?.is_audiobook && this.snap.isPlaying) {
+      const now = Date.now();
+      // Sync every 10 seconds or 10 seconds difference
+      if (now - this.lastSyncTime > 10000 || Math.abs(currentTime - this.lastSyncSeconds) > 10) {
+        this.lastSyncTime = now;
+        this.lastSyncSeconds = currentTime;
+        this.api.updateAudiobookProgress(track.id, Math.floor(currentTime)).subscribe();
+        // Update local state copy
+        track.resume_time = Math.floor(currentTime);
+      }
+    }
   }
 
   get snap() { return this._state.value; }

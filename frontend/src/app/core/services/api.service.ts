@@ -8,8 +8,8 @@ export class ApiService {
   private base = '/api';
   constructor(private http: HttpClient) {}
 
-  search(q: string): Observable<SearchResult[]> {
-    return this.http.get<SearchResult[]>(`${this.base}/search`, { params: { q } });
+  search(q: string, type: string = 'music'): Observable<SearchResult[]> {
+    return this.http.get<SearchResult[]>(`${this.base}/search`, { params: { q, type } });
   }
 
   startDownload(r: SearchResult): Observable<Download> {
@@ -35,6 +35,10 @@ export class ApiService {
     return this.http.delete<void>(`${this.base}/library/${id}`);
   }
 
+  updateTrack(id: string, title: string, artist: string): Observable<any> {
+    return this.http.put(`${this.base}/library/${id}`, { title, artist }, { responseType: 'text' });
+  }
+
   getPlaylists(): Observable<Playlist[]> {
     return this.http.get<Playlist[]>(`${this.base}/playlists`);
   }
@@ -56,11 +60,11 @@ export class ApiService {
   }
 
   addToPlaylist(playlistId: string, trackId: string): Observable<any> {
-    return this.http.post<any>(`${this.base}/playlists/${playlistId}/tracks`, { track_id: trackId });
+    return this.http.post(`${this.base}/playlists/${playlistId}/tracks`, { track_id: trackId }, { responseType: 'text' });
   }
 
   removeFromPlaylist(playlistId: string, trackId: string): Observable<any> {
-    return this.http.delete<any>(`${this.base}/playlists/${playlistId}/tracks/${trackId}`);
+    return this.http.delete(`${this.base}/playlists/${playlistId}/tracks/${trackId}`, { responseType: 'text' });
   }
 
   downloadPlaylistUrl(id: string): string {
@@ -69,5 +73,17 @@ export class ApiService {
 
   streamUrl(id: string): string {
     return `${this.base}/stream/${id}`;
+  }
+
+  getAudiobooks(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.base}/audiobooks`);
+  }
+
+  updateAudiobookProgress(id: string, resumeTime: number): Observable<any> {
+    return this.http.put<any>(`${this.base}/audiobooks/${id}/progress`, { resume_time: resumeTime });
+  }
+
+  deleteAudiobook(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.base}/audiobooks/${id}`);
   }
 }

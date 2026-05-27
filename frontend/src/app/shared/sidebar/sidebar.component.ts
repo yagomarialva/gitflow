@@ -4,6 +4,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/services/api.service';
 import { ToastService } from '../../core/services/toast.service';
+import { WebsocketService } from '../../core/services/websocket.service';
 import { Playlist } from '../../models/interfaces';
 
 @Component({
@@ -29,6 +30,10 @@ import { Playlist } from '../../models/interfaces';
         <li><a routerLink="/library" routerLinkActive="active" class="nav__item">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
           Biblioteca
+        </a></li>
+        <li><a routerLink="/audiobooks" routerLinkActive="active" class="nav__item">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          Audiolivros
         </a></li>
         <li><a routerLink="/downloads" routerLinkActive="active" class="nav__item">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -97,7 +102,7 @@ import { Playlist } from '../../models/interfaces';
         padding: 10px 12px; border-radius: var(--radius);
         color: var(--text-sub); font-weight: 500; font-size: 14px;
         transition: var(--trans); position: relative;
-        cursor: pointer; text-decoration: none;
+        cursor: pointer !important; text-decoration: none;
 
         &:hover { color: var(--text); background: var(--bg-hover); }
         &.active { color: var(--text); font-weight: 700;
@@ -137,7 +142,7 @@ import { Playlist } from '../../models/interfaces';
       display: flex; align-items: center; gap: 12px; flex: 1;
       padding: 8px 12px; border-radius: var(--radius);
       color: var(--text-sub); font-size: 13px; transition: var(--trans);
-      text-decoration: none; cursor: pointer;
+      text-decoration: none; cursor: pointer !important;
       &:hover { color: var(--text); background: var(--bg-hover); }
       &.active { color: var(--text); background: var(--bg-highlight); }
     }
@@ -175,11 +180,20 @@ export class SidebarComponent implements OnInit {
   editId: string | null = null;
   editName = '';
 
-  constructor(private api: ApiService, private toast: ToastService, private router: Router) {}
+  constructor(private api: ApiService, private toast: ToastService, private router: Router, private ws: WebsocketService) {}
 
-  ngOnInit() { this.load(); }
+  ngOnInit() { 
+    this.load(); 
+    this.ws.messages$.subscribe(m => {
+      if (m.event === 'download_progress') {
+        if (m.payload.status === 'completed') {
+          this.load();
+        }
+      }
+    });
+  }
 
-  load() { this.api.getPlaylists().subscribe(p => this.playlists = p); }
+  load() { this.api.getPlaylists().subscribe(p => { this.playlists = p; }); }
 
   nav(path: string) {
     this.router.navigateByUrl(path);

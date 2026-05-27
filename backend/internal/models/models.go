@@ -23,6 +23,7 @@ type Download struct {
 	Source      string     `json:"source"`  // "chromedp"|"ytdlp"|"torrent"
 	Progress    float64    `json:"progress"`
 	FilePath    string     `json:"file_path,omitempty"`
+	PlaylistID  string     `json:"playlist_id,omitempty"`
 	Error       string     `json:"error,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
@@ -39,13 +40,27 @@ type SearchResult struct {
 }
 
 type Playlist struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
+	ID           string    `json:"id"`
+	Name         string    `json:"name"`
+	SourceURL    string    `json:"source_url,omitempty"`    // From YouTube playlist URL
+	ThumbnailURL string    `json:"thumbnail_url,omitempty"` // Extracted thumbnail
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // WSEvent is sent over WebSocket to the frontend.
 type WSEvent struct {
 	Event   string      `json:"event"`
 	Payload interface{} `json:"payload"`
+}
+
+type Audiobook struct {
+	ID           string    `json:"id"`
+	Title        string    `json:"title"`
+	Author       string    `json:"author"`
+	Duration     int       `json:"duration"`
+	FilePath     string    `json:"file_path"`
+	ThumbnailURL string    `json:"thumbnail_url"`
+	StorageType  string    `json:"storage_type"`
+	ResumeTime   int       `json:"resume_time"`
+	AddedAt      time.Time `json:"added_at"`
 }

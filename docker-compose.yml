@@ -1,11 +1,10 @@
-version: '3.8'
-
 services:
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: ares-backend
+    user: "root"
     ports:
       - "8080:8080"
       # BitTorrent P2P ports (TCP + UDP)

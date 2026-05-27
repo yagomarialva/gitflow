@@ -74,11 +74,14 @@ import { Playlist, Track } from '../../models/interfaces';
               </td>
               <td class="track-table__dur">{{ format(t.duration) }}</td>
               <td class="track-table__actions" style="display:flex; gap: 4px; align-items:center; justify-content:flex-end; padding-right: 24px; padding-top: 12px;">
-                <a [href]="api.streamUrl(t.id)" download class="btn-icon" title="Salvar no computador" (click)="$event.stopPropagation()">
+                <a [href]="api.streamUrl(t.id)" download class="btn-icon" title="Baixar MP3 / Salvar local" (click)="$event.stopPropagation()">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 </a>
+                <button class="btn-icon" title="Editar Metadados" (click)="edit(t, $event)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                </button>
                 <button class="btn-icon" title="Remover da Playlist" (click)="remove(t, $event)">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ff4444" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
               </td>
             </tr>
@@ -283,6 +286,23 @@ export class PlaylistComponent implements OnInit {
     this.api.removeFromPlaylist(this.pl.id, t.id).subscribe({
       next: () => { this.tracks = this.tracks.filter(x => x.id !== t.id); this.toast.show('Removida da playlist'); },
       error: () => this.toast.show('Erro ao remover', 'error')
+    });
+  }
+
+  edit(t: Track, ev: Event) {
+    ev.stopPropagation();
+    const newTitle = prompt('Editar Título da Música:', t.title);
+    if (newTitle === null) return;
+    const newArtist = prompt('Editar Artista da Música:', t.artist);
+    if (newArtist === null) return;
+    
+    this.api.updateTrack(t.id, newTitle, newArtist).subscribe({
+      next: () => {
+        t.title = newTitle;
+        t.artist = newArtist;
+        this.toast.show('Música atualizada', 'success');
+      },
+      error: () => this.toast.show('Erro ao atualizar música', 'error')
     });
   }
 

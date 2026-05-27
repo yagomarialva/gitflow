@@ -53,18 +53,22 @@ func StartDownloadWorkers(numWorkers int, downloadsPath string, onProgress func(
 }
 
 // AddDownload registers a new download job and queues it.
-func AddDownload(title, sourceURL string) (*models.Download, error) {
+func AddDownload(title, sourceURL, playlistID string) (*models.Download, error) {
 	dl := &models.Download{
-		ID:        uuid.New().String(),
-		SourceURL: sourceURL,
-		Title:     title,
-		Status:    "pending",
-		Progress:  0,
-		CreatedAt: time.Now(),
+		ID:         uuid.New().String(),
+		SourceURL:  sourceURL,
+		Title:      title,
+		Status:     "pending",
+		Progress:   0,
+		PlaylistID: playlistID,
+		CreatedAt:  time.Now(),
 	}
+	// Safely add column if not exists
+	_, _ = db.DB.Exec("ALTER TABLE downloads ADD COLUMN playlist_id TEXT NOT NULL DEFAULT ''")
+
 	_, err := db.DB.Exec(
-		"INSERT INTO downloads (id, source_url, title, status, progress, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-		dl.ID, dl.SourceURL, dl.Title, dl.Status, dl.Progress, dl.CreatedAt,
+		"INSERT INTO downloads (id, source_url, title, status, progress, playlist_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		dl.ID, dl.SourceURL, dl.Title, dl.Status, dl.Progress, dl.PlaylistID, dl.CreatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -79,7 +83,184 @@ func processDownload(dl *models.Download, downloadsPath string) {
 	log.Printf("[dl] start %s — %s", dl.ID, dl.Title)
 	os.MkdirAll(downloadsPath, 0755)
 
-	// Step 1: Resolve YouTube URL if the source looks like a search result URL
+	// Step 1: Check if it's a YouTube Playlist URL
+	if strings.Contains(dl.SourceURL, "list=") && !strings.Contains(dl.SourceURL, "watch?v=") {
+		log.Printf("[dl] Detected YouTube Playlist. Initiating full scrape.")
+		dl.Status = "downloading"
+		dl.Source = "chromedp"
+		updateDL(dl)
+		notify(dl)
+
+		// 1a) Scrape the playlist page to get all track URLs/titles into a slice
+		plMeta, scrapedTracks, err := ScrapeYouTubePlaylist(context.Background(), dl.SourceURL)
+		if err != nil {
+			failDL(dl, fmt.Sprintf("failed to scrape playlist: %v", err))
+			return
+		}
+
+		log.Printf("[dl] Playlist '%s' has %d tracks. Starting sequential download.", plMeta.Name, len(scrapedTracks))
+
+		// 1b) Download each track sequentially, collecting library track IDs
+		downloadedTrackIDs := make([]string, 0, len(scrapedTracks))
+
+		for i, track := range scrapedTracks {
+			log.Printf("[dl] Downloading playlist track %d/%d: %s", i+1, len(scrapedTracks), track.Title)
+
+			// Update parent download progress based on how many tracks are done
+			dl.Progress = float64(i) / float64(len(scrapedTracks)) * 100
+			updateDL(dl)
+			notify(dl)
+
+			// Download this individual track synchronously (not via queue)
+			trackID, err := downloadSingleTrack(track.Title, track.SourceURL, downloadsPath)
+			if err != nil {
+				log.Printf("[dl] ⚠️ Failed to download track '%s': %v (skipping)", track.Title, err)
+				continue
+			}
+			downloadedTrackIDs = append(downloadedTrackIDs, trackID)
+		}
+
+		log.Printf("[dl] Downloaded %d/%d tracks. Creating playlist.", len(downloadedTrackIDs), len(scrapedTracks))
+
+		// 1c) Create the playlist in DB (only after downloads are done)
+		playlistID := plMeta.ID
+		playlistName := plMeta.Name
+		if playlistName == "" {
+			playlistName = dl.Title
+		}
+		_, err = db.DB.Exec(
+			"INSERT INTO playlists (id, name, source_url, thumbnail_url, created_at) VALUES (?, ?, ?, ?, ?)",
+			playlistID, playlistName, plMeta.SourceURL, plMeta.ThumbnailURL, plMeta.CreatedAt,
+		)
+		if err != nil {
+			log.Printf("[dl] Failed to create playlist in DB: %v", err)
+		}
+
+		// 1d) Link all downloaded tracks to the playlist
+		for _, tid := range downloadedTrackIDs {
+			_, err = db.DB.Exec(
+				"INSERT OR IGNORE INTO playlist_tracks (playlist_id, track_id) VALUES (?,?)",
+				playlistID, tid,
+			)
+			if err != nil {
+				log.Printf("[dl] Failed to link track %s to playlist: %v", tid, err)
+			}
+		}
+
+		// 1e) Garbage collection: nil out temporary slices so GC can reclaim memory
+		scrapedTracks = nil
+		downloadedTrackIDs = nil
+
+		// Mark parent download as completed
+		now := time.Now()
+		dl.Status = "completed"
+		dl.Progress = 100
+		dl.CompletedAt = &now
+		updateDL(dl)
+		notify(dl)
+		log.Printf("[dl] ✅ Playlist '%s' fully processed.", playlistName)
+		return
+	}
+	// Step 1.5: Check if it's a direct ZIP file (LibriVox)
+	if strings.HasSuffix(dl.SourceURL, ".zip") {
+		log.Printf("[dl] Detected direct ZIP download. Initiating direct fetch.")
+		dl.Status = "downloading"
+		dl.Source = "direct"
+		updateDL(dl)
+		notify(dl)
+
+		zipPath := filepath.Join(downloadsPath, dl.ID+".zip")
+		err := directDownloadFile(dl.SourceURL, zipPath, dl)
+		if err != nil {
+			failDL(dl, fmt.Sprintf("failed to download zip: %v", err))
+			return
+		}
+
+		// Insert into audiobooks directly as mp3_zip
+		now := time.Now()
+		dl.FilePath = zipPath
+		dl.Status = "completed"
+		dl.Progress = 100
+		dl.CompletedAt = &now
+		updateDL(dl)
+		notify(dl)
+
+		_, err = db.DB.Exec(
+			`INSERT INTO audiobooks (id, title, author, file_path, storage_type, added_at)
+			 VALUES (?, ?, ?, ?, ?, ?)
+			 ON CONFLICT(file_path) DO NOTHING`,
+			uuid.New().String(), dl.Title, dl.Artist, zipPath, "mp3_zip", now,
+		)
+		if err != nil {
+			log.Printf("[dl] audiobook insert failed for ZIP: %v", err)
+		}
+		log.Printf("[dl] ✅ ZIP '%s' fully downloaded.", dl.Title)
+		return
+	}
+	// Step 1.6: Check if it's a Podcast RSS feed
+	if !strings.Contains(dl.SourceURL, "youtube.com") && (strings.HasSuffix(dl.SourceURL, ".xml") || strings.Contains(dl.SourceURL, "feed") || strings.Contains(dl.SourceURL, "rss") || strings.Contains(dl.SourceURL, "podcast")) && !strings.HasSuffix(dl.SourceURL, ".zip") {
+		log.Printf("[dl] Detected Podcast RSS feed. Initiating feed parsing.")
+		dl.Status = "downloading"
+		dl.Source = "rss"
+		updateDL(dl)
+		notify(dl)
+
+		plMeta, scrapedTracks, err := ScrapePodcastRSS(dl.SourceURL)
+		if err != nil {
+			failDL(dl, fmt.Sprintf("failed to parse podcast rss: %v", err))
+			return
+		}
+
+		log.Printf("[dl] Podcast '%s' has %d episodes. Starting sequential download.", plMeta.Name, len(scrapedTracks))
+
+		downloadedTrackIDs := make([]string, 0, len(scrapedTracks))
+		for i, track := range scrapedTracks {
+			log.Printf("[dl] Downloading podcast episode %d/%d: %s", i+1, len(scrapedTracks), track.Title)
+			dl.Progress = float64(i) / float64(len(scrapedTracks)) * 100
+			updateDL(dl)
+			notify(dl)
+
+			// Download single episode (often direct MP3 urls in RSS)
+			trackID, err := downloadSingleTrack(track.Title, track.SourceURL, downloadsPath)
+			if err != nil {
+				log.Printf("[dl] ⚠️ Failed to download episode '%s': %v (skipping)", track.Title, err)
+				continue
+			}
+			downloadedTrackIDs = append(downloadedTrackIDs, trackID)
+		}
+
+		log.Printf("[dl] Downloaded %d/%d episodes. Creating podcast playlist.", len(downloadedTrackIDs), len(scrapedTracks))
+
+		playlistID := "pod-" + uuid.New().String()
+		playlistName := plMeta.Name
+		if playlistName == "" {
+			playlistName = dl.Title
+		}
+		_, err = db.DB.Exec(
+			"INSERT INTO playlists (id, name, source_url, thumbnail_url, created_at) VALUES (?, ?, ?, ?, ?)",
+			playlistID, playlistName, plMeta.SourceURL, plMeta.ThumbnailURL, plMeta.CreatedAt,
+		)
+		if err != nil {
+			log.Printf("[dl] Failed to create playlist in DB: %v", err)
+		}
+
+		for _, tid := range downloadedTrackIDs {
+			_, err = db.DB.Exec(
+				"INSERT OR IGNORE INTO playlist_tracks (playlist_id, track_id) VALUES (?,?)",
+				playlistID, tid,
+			)
+		}
+
+		now := time.Now()
+		dl.Status = "completed"
+		dl.Progress = 100
+		dl.CompletedAt = &now
+		updateDL(dl)
+		notify(dl)
+		log.Printf("[dl] ✅ Podcast '%s' fully processed.", playlistName)
+		return
+	}
+
 	ytURL := dl.SourceURL
 
 	// Step 2: Try yt-dlp first
@@ -131,18 +312,85 @@ func processDownload(dl *models.Download, downloadsPath string) {
 		storageType = "mp3_zip"
 	}
 
+	trackID := uuid.New().String()
 	_, err = db.DB.Exec(
 		`INSERT INTO library_tracks (id, title, artist, thumbnail_url, file_path, storage_type, added_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(file_path) DO NOTHING`,
-		uuid.New().String(), meta.Title, meta.Artist, meta.Thumbnail, zipPath, storageType, now,
+		trackID, meta.Title, meta.Artist, meta.Thumbnail, zipPath, storageType, now,
 	)
 	if err != nil {
 		log.Printf("[dl] library insert failed: %v", err)
 	}
 
+	// Link to playlist if needed
+	if dl.PlaylistID != "" {
+		_, err = db.DB.Exec(
+			"INSERT OR IGNORE INTO playlist_tracks (playlist_id, track_id) VALUES (?,?)",
+			dl.PlaylistID, trackID,
+		)
+		if err != nil {
+			log.Printf("[dl] playlist track link failed: %v", err)
+		}
+	}
+
 	notify(dl)
 	log.Printf("[dl] ✅ done %s → %s", dl.ID, zipPath)
+}
+
+// downloadSingleTrack downloads a single track synchronously (not queued).
+// It runs yt-dlp, compresses, inserts into library_tracks, and returns the track ID.
+// Used by the playlist pipeline to download each track in a loop.
+func downloadSingleTrack(title, sourceURL, downloadsPath string) (string, error) {
+	tmpDL := &models.Download{
+		ID:        uuid.New().String(),
+		SourceURL: sourceURL,
+		Title:     title,
+		Status:    "downloading",
+		Source:    "ytdlp",
+		CreatedAt: time.Now(),
+	}
+
+	// Try yt-dlp
+	rawFile, meta, err := ytDlpDownload(sourceURL, downloadsPath, tmpDL)
+	if err != nil {
+		log.Printf("[dl-single] yt-dlp failed for '%s': %v — trying torrent", title, err)
+		rawFile, err = torrentFallback(title, downloadsPath, tmpDL)
+		if err != nil {
+			return "", fmt.Errorf("all sources exhausted for '%s': %w", title, err)
+		}
+		meta = &trackMeta{Title: title, Artist: ""}
+	}
+
+	// Compress
+	zipPath, err := compressToZip(rawFile, meta, downloadsPath)
+	if err != nil {
+		log.Printf("[dl-single] compression failed (%v) — keeping raw mp3", err)
+		zipPath = rawFile
+	} else {
+		os.Remove(rawFile)
+	}
+
+	// Persist to library
+	now := time.Now()
+	storageType := "mp3"
+	if strings.HasSuffix(zipPath, ".zip") {
+		storageType = "mp3_zip"
+	}
+
+	trackID := uuid.New().String()
+	_, err = db.DB.Exec(
+		`INSERT INTO library_tracks (id, title, artist, thumbnail_url, file_path, storage_type, added_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(file_path) DO NOTHING`,
+		trackID, meta.Title, meta.Artist, meta.Thumbnail, zipPath, storageType, now,
+	)
+	if err != nil {
+		return "", fmt.Errorf("library insert failed: %w", err)
+	}
+
+	log.Printf("[dl-single] ✅ Track '%s' saved as %s", meta.Title, trackID)
+	return trackID, nil
 }
 
 // ─── yt-dlp integration ───────────────────────────────────────────────────────
@@ -488,8 +736,8 @@ func failDL(dl *models.Download, reason string) {
 
 func updateDL(dl *models.Download) {
 	_, err := db.DB.Exec(
-		"UPDATE downloads SET status=?, progress=?, source=?, file_path=?, error=?, completed_at=? WHERE id=?",
-		dl.Status, dl.Progress, dl.Source, dl.FilePath, dl.Error, dl.CompletedAt, dl.ID,
+		"UPDATE downloads SET status=?, progress=?, source=?, file_path=?, playlist_id=?, error=?, completed_at=? WHERE id=?",
+		dl.Status, dl.Progress, dl.Source, dl.FilePath, dl.PlaylistID, dl.Error, dl.CompletedAt, dl.ID,
 	)
 	if err != nil {
 		log.Printf("[dl] updateDL error: %v", err)
@@ -541,5 +789,27 @@ func copyFile(src, dst string) error {
 	}
 	defer out.Close()
 	_, err = io.Copy(out, in)
+	return err
+}
+
+// directDownloadFile downloads a file (like a LibriVox ZIP) directly to disk.
+func directDownloadFile(url, destPath string, dl *models.Download) error {
+	out, err := os.Create(destPath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("bad status: %s", resp.Status)
+	}
+
+	_, err = io.Copy(out, resp.Body)
 	return err
 }
