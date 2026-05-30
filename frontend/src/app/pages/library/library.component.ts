@@ -82,36 +82,44 @@ import { Track, Playlist } from '../../models/interfaces';
   `,
   styles: [`
     .badge {
-      background: rgba(255,255,255,.1);
-      color: var(--text-sub);
-      font-size: 11px;
+      background: rgba(0, 191, 255, 0.08);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(0, 191, 255, 0.15);
+      font-size: 10px;
       font-weight: 700;
-      padding: 3px 8px;
+      padding: 4px 10px;
       border-radius: var(--radius-full);
       text-transform: uppercase;
       letter-spacing: .5px;
     }
-    .empty { padding: 80px 0; text-align: center; color: var(--text-muted); display:flex;flex-direction:column;align-items:center;gap:16px; h3{color:var(--text);font-size:20px;} }
+    .empty { padding: 96px 0; text-align: center; color: var(--text-muted); display:flex;flex-direction:column;align-items:center;gap:16px; h3{color:var(--text);font-size:22px;} svg { color: var(--accent-cyan); filter: drop-shadow(0 0 8px rgba(0, 191, 255, 0.3)); } }
 
     .dropdown-menu {
-      position: absolute; right: 0; top: 100%; z-index: 50;
-      background: #2a2a3e; border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 8px 0; min-width: 200px;
+      position: absolute; right: 0; top: calc(100% + 4px); z-index: 50;
+      background: var(--bg-elevated); border: 1.5px solid var(--border);
+      border-radius: var(--radius); padding: 8px 0; min-width: 210px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      animation: fadeIn 0.2s ease;
     }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
     .dropdown-header {
-      padding: 4px 16px 8px; font-size: 11px; font-weight: 700;
+      padding: 6px 16px 10px; font-size: 10px; font-weight: 800;
       text-transform: uppercase; color: var(--text-muted); letter-spacing: 1px;
-      border-bottom: 1px solid var(--border); margin-bottom: 8px;
+      border-bottom: 1px solid var(--border-subtle); margin-bottom: 6px;
     }
     .dropdown-item {
-      padding: 8px 16px; font-size: 13px; color: var(--text); cursor: pointer;
+      padding: 10px 16px; font-size: 13px; color: var(--text-sub); cursor: pointer;
       display: flex; align-items: center; gap: 12px; transition: var(--trans);
-      &:hover { background: var(--bg-hover); }
+      &:hover { background: var(--bg-hover); color: var(--text); }
     }
     .dropdown-icon {
-      width: 24px; height: 24px; border-radius: 4px; background: var(--bg-highlight);
-      display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--text-muted);
+      width: 24px; height: 24px; border-radius: 6px; background: var(--bg-highlight);
+      display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--text-muted);
     }
     .dropdown-empty {
       padding: 12px 16px; font-size: 13px; color: var(--text-muted); font-style: italic;

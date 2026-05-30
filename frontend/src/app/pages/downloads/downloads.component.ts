@@ -51,48 +51,70 @@ import { Subscription } from 'rxjs';
     </div>
   `,
   styles: [`
-    .dls { display: flex; flex-direction: column; gap: 12px; max-width: 800px; }
+    .dls { display: flex; flex-direction: column; gap: 14px; max-width: 800px; }
 
     .dl-card {
-      display: flex; align-items: center; gap: 16px;
-      padding: 16px 20px; background: var(--bg-card);
-      border-radius: var(--radius); border-left: 4px solid transparent;
-      transition: var(--trans); box-shadow: 0 4px 12px rgba(0,0,0,.2);
+      display: flex; align-items: center; gap: 20px;
+      padding: 18px 24px; background: var(--bg-card);
+      border-radius: var(--radius-lg); border-left: 4px solid transparent;
+      border-top: 1px solid rgba(255, 255, 255, 0.03);
+      border-right: 1px solid rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      transition: var(--trans); 
+      box-shadow: 0 6px 18px rgba(0,0,0,0.3);
 
-      &--completed   { border-left-color: var(--accent); }
-      &--failed      { border-left-color: #f15555; }
-      &--downloading { border-left-color: #3b82f6; }
-      &--converting  { border-left-color: #f59e0b; }
+      &--completed   { 
+        border-left-color: var(--accent); 
+        box-shadow: 0 6px 18px rgba(255, 18, 124, 0.1); 
+      }
+      &--failed      { 
+        border-left-color: #ff3355; 
+        box-shadow: 0 6px 18px rgba(255, 51, 85, 0.1); 
+      }
+      &--downloading { 
+        border-left-color: var(--accent-cyan); 
+        box-shadow: 0 6px 18px rgba(0, 191, 255, 0.1); 
+      }
+      &--converting  { 
+        border-left-color: var(--accent-cyan); 
+        box-shadow: 0 6px 18px rgba(0, 191, 255, 0.1); 
+      }
+
+      &:hover {
+        transform: translateY(-2px);
+        background: var(--bg-hover);
+      }
 
       &__info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
     }
 
     .dl-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-    .title { font-weight: 700; font-size: 15px; }
+    .title { font-weight: 700; font-size: 15px; color: var(--text); }
     
     .badge {
-      font-size: 10px; font-weight: 800; padding: 3px 10px;
-      border-radius: var(--radius-full); text-transform: uppercase; letter-spacing: .5px;
-      &--pending     { background: rgba(255,255,255,.1); color: var(--text-sub); }
-      &--downloading { background: rgba(59,130,246,.2); color: #60a5fa; }
-      &--converting  { background: rgba(245,158,11,.2); color: #fbbf24; }
-      &--completed   { background: var(--accent-dim); color: var(--accent); }
-      &--failed      { background: rgba(241,85,85,.15); color: #f15555; }
+      font-size: 10px; font-weight: 800; padding: 4px 12px;
+      border-radius: var(--radius-full); text-transform: uppercase; letter-spacing: .8px;
+      
+      &--pending     { background: rgba(255,255,255,.08); color: var(--text-sub); }
+      &--downloading { background: rgba(0, 191, 255, 0.1); color: var(--accent-cyan); border: 1px solid rgba(0, 191, 255, 0.15); }
+      &--converting  { background: rgba(0, 191, 255, 0.1); color: var(--accent-cyan); border: 1px solid rgba(0, 191, 255, 0.15); }
+      &--completed   { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(255, 18, 124, 0.15); }
+      &--failed      { background: rgba(255, 51, 85, 0.1); color: #ff3355; border: 1px solid rgba(255, 51, 85, 0.15); }
     }
 
-    .meta { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-sub); }
-    .source { background: rgba(255,255,255,.05); padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .meta { display: flex; align-items: center; gap: 14px; font-size: 12px; color: var(--text-sub); }
+    .source { background: rgba(255, 255, 255, 0.05); padding: 2px 8px; border-radius: 4px; font-weight: 700; color: var(--accent-cyan); font-size: 10px; letter-spacing: 0.5px; }
+    .artist { font-weight: 500; }
 
-    .prog { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
-    .prog__bar { flex: 1; height: 6px; background: rgba(255,255,255,.1); border-radius: var(--radius-full); overflow: hidden; }
-    .prog__fill { height: 100%; background: linear-gradient(90deg, #3b82f6, #60a5fa); border-radius: var(--radius-full); transition: width .3s ease; }
-    .prog__pct { font-size: 12px; font-weight: 600; width: 36px; text-align: right; }
+    .prog { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+    .prog__bar { flex: 1; height: 6px; background: rgba(255, 255, 255, 0.08); border-radius: var(--radius-full); overflow: hidden; }
+    .prog__fill { height: 100%; background: var(--gradient-primary); border-radius: var(--radius-full); transition: width .3s ease; box-shadow: 0 0 8px rgba(0, 191, 255, 0.3); }
+    .prog__pct { font-size: 11px; font-weight: 700; width: 36px; text-align: right; color: var(--text-sub); }
 
-    .indeterminate { width: 40% !important; animation: slide 1.5s infinite ease-in-out; }
+    .indeterminate { width: 40% !important; animation: slide 1.5s infinite ease-in-out; background: var(--gradient-primary) !important; }
     @keyframes slide { 0% { transform: translateX(-200%); } 100% { transform: translateX(300%); } }
 
-    .error { font-size: 12px; color: #f15555; margin-top: 4px; font-weight: 500; }
-    .empty { padding: 80px 0; text-align: center; color: var(--text-muted); display:flex;flex-direction:column;align-items:center;gap:16px; h3{color:var(--text);font-size:20px;} }
+    .error { font-size: 12px; color: #ff3355; margin-top: 4px; font-weight: 600; }
   `]
 })
 export class DownloadsComponent implements OnInit, OnDestroy {

@@ -34,12 +34,14 @@ import { ToastComponent } from './shared/toast/toast.component';
         width: var(--sidebar-w);
         flex-shrink: 0;
         overflow-y: auto;
+        border-right: 1px solid var(--border);
+        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
       }
 
       &__main {
         flex: 1;
         overflow-y: auto;
-        background: linear-gradient(to bottom, #1a1a2e 0%, var(--bg-base) 300px);
+        background: radial-gradient(circle at 50% 0%, #15192e 0%, var(--bg-black) 80%);
       }
     }
 

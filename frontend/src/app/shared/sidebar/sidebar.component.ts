@@ -91,7 +91,14 @@ import { Playlist } from '../../models/interfaces';
 
     .logo {
       display: flex; align-items: center; gap: 10px;
-      padding: 22px 20px 20px; font-size: 18px; font-weight: 800; color: var(--text);
+      padding: 24px 20px; font-size: 20px; font-weight: 900;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+      svg {
+        filter: drop-shadow(0 0 6px var(--accent));
+      }
     }
 
     .nav {
@@ -99,29 +106,49 @@ import { Playlist } from '../../models/interfaces';
 
       &__item {
         display: flex; align-items: center; gap: 14px;
-        padding: 10px 12px; border-radius: var(--radius);
-        color: var(--text-sub); font-weight: 500; font-size: 14px;
+        padding: 10px 14px; border-radius: var(--radius);
+        color: var(--text-sub); font-weight: 600; font-size: 14px;
         transition: var(--trans); position: relative;
         cursor: pointer !important; text-decoration: none;
+        margin-bottom: 4px;
 
-        &:hover { color: var(--text); background: var(--bg-hover); }
-        &.active { color: var(--text); font-weight: 700;
-          svg { stroke: var(--accent); }
+        svg {
+          transition: var(--trans);
+          stroke: var(--text-sub);
+        }
+
+        &:hover { 
+          color: var(--text); 
+          background: var(--bg-hover);
+          svg { stroke: var(--text); }
+        }
+
+        &.active { 
+          color: var(--text); 
+          font-weight: 700;
+          background: var(--gradient-pink);
+          box-shadow: 0 4px 15px rgba(255, 18, 124, 0.35);
+          svg { stroke: var(--text); }
+          .badge {
+            background: var(--text);
+            color: var(--accent);
+          }
         }
 
         .badge {
-          margin-left: auto; background: var(--accent); color: #000;
+          margin-left: auto; background: var(--accent); color: var(--text);
           border-radius: var(--radius-full); padding: 2px 8px;
           font-size: 10px; font-weight: 800;
+          transition: var(--trans);
         }
       }
     }
 
-    .divider { height: 1px; background: var(--border); margin: 10px 16px; }
+    .divider { height: 1px; background: rgba(255, 18, 124, 0.15); margin: 12px 16px; }
 
     .pl-header {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 8px 20px 8px 20px; font-size: 11px; font-weight: 700;
+      padding: 8px 20px; font-size: 11px; font-weight: 800;
       letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted);
     }
 
@@ -143,8 +170,15 @@ import { Playlist } from '../../models/interfaces';
       padding: 8px 12px; border-radius: var(--radius);
       color: var(--text-sub); font-size: 13px; transition: var(--trans);
       text-decoration: none; cursor: pointer !important;
+      margin-bottom: 2px;
       &:hover { color: var(--text); background: var(--bg-hover); }
-      &.active { color: var(--text); background: var(--bg-highlight); }
+      &.active { 
+        color: var(--text); 
+        background: rgba(0, 191, 255, 0.08); 
+        border-left: 3px solid var(--accent-cyan);
+        font-weight: 700;
+        .pl-icon { background: rgba(0, 191, 255, 0.15); color: var(--accent-cyan); }
+      }
     }
 
     .pl-actions {
@@ -164,9 +198,10 @@ import { Playlist } from '../../models/interfaces';
     }
 
     .pl-icon {
-      width: 36px; height: 36px; border-radius: 4px;
+      width: 28px; height: 28px; border-radius: 6px;
       background: var(--bg-highlight); display: flex; align-items: center;
-      justify-content: center; font-size: 14px; flex-shrink: 0; color: var(--text-muted);
+      justify-content: center; font-size: 12px; flex-shrink: 0; color: var(--text-muted);
+      transition: var(--trans);
     }
 
     .pl-empty { padding: 12px; font-size: 12px; color: var(--text-muted); text-align: center; }

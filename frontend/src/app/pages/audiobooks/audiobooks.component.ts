@@ -50,26 +50,47 @@ import { WebsocketService } from '../../core/services/websocket.service';
     </div>
   `,
   styles: [`
-    .view-header { padding: 30px; position: sticky; top: 0; background: rgba(26,26,46,0.95); backdrop-filter: blur(10px); z-index: 10; border-bottom: 1px solid var(--border); }
-    .view-title { font-size: 32px; font-weight: 800; margin-bottom: 8px; color: var(--text); }
-    .view-subtitle { color: var(--text-sub); font-size: 14px; }
+    .view-header { 
+      padding: 32px 40px 16px; 
+      position: sticky; top: 0; 
+      background: rgba(11,13,25,0.85); 
+      backdrop-filter: blur(12px); 
+      -webkit-backdrop-filter: blur(12px); 
+      z-index: 10; 
+      border-bottom: 1.5px solid var(--border); 
+    }
+    .view-title { 
+      font-size: 36px; 
+      font-weight: 900; 
+      margin-bottom: 8px; 
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+    .view-subtitle { color: var(--text-sub); font-size: 14px; font-weight: 500; }
 
     .audiobooks-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 20px;
-      padding: 30px;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 24px;
+      padding: 32px 40px;
     }
 
     .audiobook-card {
-      background: var(--bg-sidebar);
-      border-radius: var(--radius);
-      padding: 15px;
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      padding: 16px;
       transition: var(--trans);
       position: relative;
+      border: 1px solid rgba(255,255,255,0.04);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.3);
 
       &:hover {
+        transform: translateY(-5px);
         background: var(--bg-hover);
+        border-color: rgba(255, 18, 124, 0.3);
+        box-shadow: 0 10px 25px rgba(255, 18, 124, 0.15);
         .btn-play-overlay { opacity: 1; transform: translateY(0); }
       }
     }
@@ -77,11 +98,11 @@ import { WebsocketService } from '../../core/services/websocket.service';
     .card-cover {
       position: relative;
       aspect-ratio: 1;
-      border-radius: 8px;
+      border-radius: 10px;
       overflow: hidden;
-      margin-bottom: 15px;
+      margin-bottom: 14px;
       background: var(--bg-highlight);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.4);
 
       img { width: 100%; height: 100%; object-fit: cover; }
       .cover-fallback { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 40px; color: var(--text-muted); }
@@ -89,44 +110,44 @@ import { WebsocketService } from '../../core/services/websocket.service';
 
     .btn-play-overlay {
       position: absolute;
-      bottom: 10px; right: 10px;
-      width: 48px; height: 48px;
+      bottom: 12px; right: 12px;
+      width: 44px; height: 44px;
       border-radius: 50%;
-      background: var(--accent);
-      color: #000;
+      background: var(--gradient-pink);
+      color: var(--text);
       border: none;
       display: flex; align-items: center; justify-content: center;
       cursor: pointer;
       opacity: 0;
-      transform: translateY(10px);
-      transition: all 0.3s cubic-bezier(0.3, 0, 0, 1);
-      box-shadow: 0 8px 8px rgba(0,0,0,0.3);
+      transform: translateY(8px);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 6px 12px rgba(255,18,124,0.4);
 
-      &:hover { transform: scale(1.05); background: #1ed760; }
+      &:hover { transform: scale(1.1) !important; box-shadow: 0 8px 18px rgba(255,18,124,0.6); }
     }
 
     .card-title {
-      font-size: 15px; font-weight: 700; color: var(--text);
+      font-size: 14px; font-weight: 700; color: var(--text);
       margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
 
     .card-author {
-      font-size: 13px; color: var(--text-sub); margin-bottom: 12px;
+      font-size: 12px; color: var(--text-sub); margin-bottom: 12px;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
 
     .progress-bar {
-      height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; margin-bottom: 6px;
+      height: 4px; background: rgba(255,255,255,0.1); border-radius: var(--radius-full); overflow: hidden; margin-bottom: 8px;
     }
-    .progress-fill { height: 100%; background: var(--accent); }
+    .progress-fill { height: 100%; background: var(--accent-cyan); box-shadow: 0 0 8px var(--accent-cyan); }
 
     .card-meta {
       display: flex; justify-content: space-between; align-items: center;
-      font-size: 11px; color: var(--text-muted);
+      font-size: 11px; color: var(--text-muted); font-weight: 600;
     }
 
     .card-actions {
-      position: absolute; top: 20px; right: 20px;
+      position: absolute; top: 22px; right: 22px;
       display: flex; gap: 8px; opacity: 0; transition: var(--trans);
     }
 
@@ -135,11 +156,11 @@ import { WebsocketService } from '../../core/services/websocket.service';
     .btn-icon {
       width: 28px; height: 28px; border-radius: 50%; background: rgba(0,0,0,0.6);
       color: var(--text); border: none; display: flex; align-items: center; justify-content: center;
-      cursor: pointer;
-      &:hover { background: var(--accent); color: #000; }
+      cursor: pointer; transition: var(--trans);
+      &:hover { background: var(--accent); color: var(--text); transform: scale(1.1); }
     }
 
-    .empty-state { grid-column: 1 / -1; padding: 40px; text-align: center; color: var(--text-muted); }
+    .empty-state { grid-column: 1 / -1; padding: 48px; text-align: center; color: var(--text-muted); font-size: 14px; }
   `]
 })
 export class AudiobooksComponent implements OnInit {
