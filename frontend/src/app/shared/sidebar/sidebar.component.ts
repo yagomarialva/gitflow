@@ -15,10 +15,8 @@ import { Playlist } from '../../models/interfaces';
     <nav class="sidebar">
       <!-- Logo -->
       <div class="logo">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="var(--accent)">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
-        </svg>
-        <span>AresFlow</span>
+        <img src="/logo.png" alt="Mars Logo" width="36" height="36" style="border-radius: 8px;">
+        <span>Mars</span>
       </div>
 
       <!-- Main nav -->
@@ -90,14 +88,22 @@ import { Playlist } from '../../models/interfaces';
     }
 
     .logo {
-      display: flex; align-items: center; gap: 10px;
-      padding: 24px 20px; font-size: 20px; font-weight: 900;
-      background: var(--gradient-primary);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      letter-spacing: -0.5px;
-      svg {
-        filter: drop-shadow(0 0 6px var(--accent));
+      display: flex; align-items: center; gap: 12px;
+      padding: 24px 20px;
+      img {
+        width: 36px;
+        height: 36px;
+        object-fit: cover;
+        flex-shrink: 0;
+        border-radius: 8px;
+        filter: drop-shadow(0 0 6px rgba(255, 18, 124, 0.4));
+      }
+      span {
+        font-size: 22px; font-weight: 900;
+        background: var(--gradient-primary);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        letter-spacing: -0.5px;
       }
     }
 
