@@ -72,7 +72,9 @@ import { Observable } from 'rxjs';
   `,
   styles: [`
     .bar {
-      display: flex; align-items: center;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
       height: 100%; padding: 0 24px;
       background: rgba(11, 13, 25, 0.85); 
       backdrop-filter: blur(20px);
@@ -85,7 +87,7 @@ import { Observable } from 'rxjs';
     /* Track info */
     .bar__info {
       display: flex; align-items: center; gap: 14px;
-      width: var(--sidebar-w); min-width: 0; flex-shrink: 0;
+      min-width: 0;
     }
 
     .thumb {
@@ -106,7 +108,11 @@ import { Observable } from 'rxjs';
 
     /* Center controls */
     .bar__center {
-      flex: 1; display: flex; flex-direction: column; align-items: center; gap: 10px;
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      width: 100%;
+      min-width: 400px;
+      max-width: 600px;
+      justify-self: center;
     }
 
     .controls {
@@ -137,10 +143,94 @@ import { Observable } from 'rxjs';
 
     /* Volume */
     .bar__vol {
-      display: flex; align-items: center; gap: 10px; width: 160px; flex-shrink: 0;
+      display: flex; align-items: center; gap: 10px; width: 160px;
+      justify-self: end;
       justify-content: flex-end;
       .btn-icon { color: var(--text-sub); &:hover { color: var(--text); } }
       input { flex: 1; max-width: 100px; }
+    }
+
+    /* Responsive styles for player bar */
+    @media (max-width: 767px) {
+      .bar {
+        grid-template-columns: 1fr auto 1fr;
+        padding: 0 16px;
+        gap: 12px;
+      }
+      
+      .bar__info {
+        min-width: 0;
+      }
+      
+      .thumb {
+        width: 40px;
+        height: 40px;
+      }
+
+      .meta__title {
+        font-size: 13px;
+      }
+
+      .meta__artist {
+        font-size: 11px;
+      }
+      
+      .bar__center {
+        width: auto;
+        min-width: 0;
+        max-width: none;
+        gap: 0;
+        position: static;
+        justify-self: center;
+      }
+
+      .bar__center .seek {
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        max-width: none;
+        height: 3px;
+        padding: 0;
+        margin: 0;
+        z-index: 10;
+      }
+
+      .seek__time {
+        display: none;
+      }
+
+      .seek input[type="range"] {
+        height: 3px;
+        margin: 0;
+        border-radius: 0;
+        &::-webkit-slider-thumb {
+          display: none;
+        }
+      }
+
+      .bar__vol {
+        display: flex !important;
+        visibility: hidden;
+        width: 100%;
+      }
+
+      .controls {
+        gap: 12px;
+        
+        /* Hide shuffle, repeat on mobile */
+        button:nth-child(1), button:nth-child(5) {
+          display: none;
+        }
+      }
+      
+      .btn-play {
+        width: 38px;
+        height: 38px;
+        box-shadow: 0 3px 10px rgba(255, 18, 124, 0.4);
+        svg {
+          width: 18px;
+          height: 18px;
+        }
+      }
     }
   `]
 })

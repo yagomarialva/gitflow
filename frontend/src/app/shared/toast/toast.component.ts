@@ -46,6 +46,18 @@ import { ToastService } from '../../core/services/toast.service';
       from { transform: translateX(110%); opacity: 0; }
       to   { transform: translateX(0);    opacity: 1; }
     }
+
+    /* Responsive styles for toasts */
+    @media (max-width: 480px) {
+      .toast-wrap {
+        left: 16px;
+        right: 16px;
+      }
+      .toast {
+        min-width: 0;
+        max-width: none;
+      }
+    }
   `]
 })
 export class ToastComponent implements OnInit {

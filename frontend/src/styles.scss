@@ -224,3 +224,109 @@ input[type="range"] {
   &__dur    { color: var(--text-sub); font-size: 13px; text-align: right; width: 90px; font-weight: 500; }
   &__actions { opacity: 0.5; transition: var(--trans); }
 }
+
+/* ── Responsive adjustments ────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  :root {
+    --player-h: 72px;
+  }
+
+  .page {
+    padding: 20px 16px;
+    &__title {
+      font-size: 28px;
+      margin-bottom: 16px;
+    }
+  }
+
+  /* Collapsible track table into cards */
+  .track-table {
+    display: block;
+    border-spacing: 0;
+
+    thead {
+      display: none; /* Hide table headers */
+    }
+
+    tbody {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .track-row {
+      display: grid !important;
+      grid-template-areas: 
+        "info dur"
+        "actions actions";
+      grid-template-columns: 1fr auto;
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      padding: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      gap: 12px;
+      cursor: pointer;
+
+      td {
+        padding: 0 !important;
+        background: transparent !important;
+        border: none !important;
+        width: auto !important;
+        text-align: left !important;
+        &:first-child, &:last-child { border-radius: 0 !important; }
+      }
+
+      &:hover {
+        transform: none;
+      }
+
+      &.is-playing {
+        border-color: var(--accent);
+        background: var(--accent-dim) !important;
+        box-shadow: var(--shadow-neon);
+      }
+    }
+
+    /* Hide index number and quality columns */
+    &__num, td:nth-child(3) {
+      display: none !important;
+    }
+
+    /* Track thumbnail/info layout */
+    td:nth-child(2) {
+      grid-area: info;
+      display: flex !important;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    /* Position duration at top right */
+    &__dur {
+      grid-area: dur;
+      align-self: start;
+      justify-self: end;
+      width: auto !important;
+      font-size: 11px !important;
+      color: var(--text-muted) !important;
+      background: none !important;
+      position: static !important;
+    }
+
+    /* Align actions to the bottom of the card */
+    &__actions {
+      grid-area: actions;
+      display: flex !important;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+      border-top: 1px solid var(--border-subtle) !important;
+      padding-top: 8px !important;
+      opacity: 1 !important;
+      width: 100% !important;
+      position: static !important;
+    }
+  }
+}
+

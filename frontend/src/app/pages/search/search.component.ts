@@ -163,6 +163,84 @@ import { SearchResult } from '../../models/interfaces';
     .skeleton-card { height: 260px; border-radius: var(--radius-lg); }
 
     .empty { padding: 48px 0; text-align: center; }
+
+    /* Responsive styles for search */
+    @media (max-width: 767px) {
+      .results {
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+        gap: 12px;
+      }
+      .result-card {
+        padding: 10px;
+        &__img, &__placeholder {
+          margin-bottom: 8px;
+        }
+        &__title {
+          font-size: 13px;
+        }
+        &__artist {
+          font-size: 11px;
+        }
+        &__dl {
+          right: 12px;
+          bottom: 12px;
+          width: 32px;
+          height: 32px;
+          svg {
+            width: 16px;
+            height: 16px;
+          }
+        }
+      }
+      .skeleton-card {
+        height: 200px;
+      }
+    }
+
+    @media (max-width: 599px) {
+      .search-box {
+        flex-direction: column;
+        align-items: stretch;
+        border-radius: var(--radius-lg);
+        padding: 16px;
+        gap: 12px;
+        max-width: none;
+        
+        svg { display: none; }
+        
+        &__input {
+          width: 100%;
+          padding: 10px;
+          background: var(--bg-highlight);
+          border-radius: var(--radius);
+          border: 1.5px solid var(--border-subtle);
+          &:focus { border-color: var(--accent); }
+        }
+        
+        &__select {
+          width: 100%;
+          border-radius: var(--radius);
+          padding: 10px 16px;
+          background: var(--bg-highlight);
+          margin: 0;
+        }
+        
+        button {
+          width: 100%;
+          border-radius: var(--radius-full);
+          padding: 12px !important;
+          margin: 0;
+        }
+      }
+    }
+
+    /* Force download button to display on touch devices */
+    @media (hover: none) {
+      .result-card__dl {
+        opacity: 1 !important;
+        transform: translateY(0) !important;
+      }
+    }
   `]
 })
 export class SearchComponent {

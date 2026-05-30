@@ -115,6 +115,46 @@ import { Subscription } from 'rxjs';
     @keyframes slide { 0% { transform: translateX(-200%); } 100% { transform: translateX(300%); } }
 
     .error { font-size: 12px; color: #ff3355; margin-top: 4px; font-weight: 600; }
+
+    /* Responsive styles for downloads */
+    @media (max-width: 599px) {
+      .dl-card {
+        padding: 12px 16px;
+        gap: 12px;
+      }
+      
+      .dl-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+      }
+
+      .title {
+        font-size: 13px;
+        line-height: 1.3;
+      }
+
+      .badge {
+        padding: 2px 8px;
+        font-size: 9px;
+        align-self: flex-start;
+      }
+
+      .meta {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+      }
+
+      .prog {
+        gap: 8px;
+      }
+
+      .prog__pct {
+        font-size: 10px;
+        width: auto;
+      }
+    }
   `]
 })
 export class DownloadsComponent implements OnInit, OnDestroy {

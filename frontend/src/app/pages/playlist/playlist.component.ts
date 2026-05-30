@@ -214,6 +214,62 @@ import { Playlist, Track } from '../../models/interfaces';
       transition: var(--trans);
       &:hover { border-color: var(--accent-cyan); background: rgba(0, 191, 255, 0.08); }
     }
+
+    /* Responsive styles for Playlist Component */
+    @media (max-width: 767px) {
+      .hero {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 32px 20px 20px;
+        gap: 16px;
+        
+        &__cover {
+          width: 120px;
+          height: 120px;
+          svg {
+            width: 44px;
+            height: 44px;
+          }
+        }
+
+        &__title {
+          font-size: 28px;
+        }
+      }
+
+      .actions {
+        padding: 16px 20px;
+        justify-content: center;
+        gap: 16px;
+      }
+
+      .table-wrap {
+        padding: 0 16px 20px;
+      }
+
+      .empty {
+        padding: 36px 20px;
+        text-align: center;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .modal {
+        max-height: 90vh;
+      }
+      .modal-header {
+        padding: 16px 20px;
+        h3 { font-size: 18px; }
+      }
+      .modal-item {
+        padding: 10px 20px;
+        gap: 10px;
+      }
+      .modal-thumb {
+        width: 36px; height: 36px;
+      }
+    }
   `]
 })
 export class PlaylistComponent implements OnInit {

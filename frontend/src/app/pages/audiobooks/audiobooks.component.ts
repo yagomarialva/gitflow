@@ -161,6 +161,62 @@ import { WebsocketService } from '../../core/services/websocket.service';
     }
 
     .empty-state { grid-column: 1 / -1; padding: 48px; text-align: center; color: var(--text-muted); font-size: 14px; }
+
+    /* Responsive styles for Audiobooks */
+    @media (max-width: 767px) {
+      .view-header {
+        padding: 24px 20px 12px;
+      }
+      .view-title {
+        font-size: 28px;
+      }
+      .view-subtitle {
+        font-size: 12px;
+      }
+      .audiobooks-grid {
+        padding: 20px 16px;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      }
+      .audiobook-card {
+        padding: 10px;
+        .card-cover {
+          margin-bottom: 8px;
+        }
+        .card-title {
+          font-size: 13px;
+        }
+        .card-author {
+          font-size: 11px;
+          margin-bottom: 8px;
+        }
+        .btn-play-overlay {
+          bottom: 8px;
+          right: 8px;
+          width: 36px;
+          height: 36px;
+          svg {
+            width: 18px;
+            height: 18px;
+          }
+        }
+        .card-actions {
+          top: 14px;
+          right: 14px;
+        }
+      }
+    }
+
+    /* Force controls to show on touch screens */
+    @media (hover: none) {
+      .btn-play-overlay {
+        opacity: 1 !important;
+        transform: translateY(0) !important;
+      }
+      .card-actions {
+        opacity: 1 !important;
+      }
+    }
   `]
 })
 export class AudiobooksComponent implements OnInit {

@@ -15,7 +15,7 @@ import { Playlist } from '../../models/interfaces';
     <nav class="sidebar">
       <!-- Logo -->
       <div class="logo">
-        <img src="/logo.png" alt="Mars Logo" width="36" height="36" style="border-radius: 8px;">
+        <img src="/logo.png" alt="Mars Logo" style="border-radius: 8px;">
         <span>Mars</span>
       </div>
 
@@ -91,9 +91,9 @@ import { Playlist } from '../../models/interfaces';
       display: flex; align-items: center; gap: 12px;
       padding: 24px 20px;
       img {
-        width: 36px;
-        height: 36px;
-        object-fit: cover;
+        height: 32px;
+        width: auto;
+        object-fit: contain;
         flex-shrink: 0;
         border-radius: 8px;
         filter: drop-shadow(0 0 6px rgba(255, 18, 124, 0.4));
