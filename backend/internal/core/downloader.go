@@ -91,8 +91,9 @@ func processDownload(dl *models.Download, downloadsPath string) {
 		updateDL(dl)
 		notify(dl)
 
+		cleanedURL := cleanPlaylistURL(dl.SourceURL)
 		// 1a) Scrape the playlist page to get all track URLs/titles into a slice
-		plMeta, scrapedTracks, err := ScrapeYouTubePlaylist(context.Background(), dl.SourceURL)
+		plMeta, scrapedTracks, err := ScrapeYouTubePlaylist(context.Background(), cleanedURL)
 		if err != nil {
 			failDL(dl, fmt.Sprintf("failed to scrape playlist: %v", err))
 			return

@@ -5,6 +5,7 @@ import { PlayerService } from '../../core/services/player.service';
 import { Audiobook } from '../../models/interfaces';
 import { ToastService } from '../../core/services/toast.service';
 import { WebsocketService } from '../../core/services/websocket.service';
+import { ModalService } from '../../core/services/modal.service';
 
 @Component({
   selector: 'app-audiobooks',
@@ -222,7 +223,7 @@ import { WebsocketService } from '../../core/services/websocket.service';
 export class AudiobooksComponent implements OnInit {
   audiobooks: Audiobook[] = [];
 
-  constructor(private api: ApiService, private player: PlayerService, private toast: ToastService, private ws: WebsocketService) {}
+  constructor(private api: ApiService, private player: PlayerService, private toast: ToastService, private ws: WebsocketService, private modal: ModalService) {}
 
   ngOnInit() {
     this.load();
@@ -256,8 +257,9 @@ export class AudiobooksComponent implements OnInit {
     this.player.playTrack(t);
   }
 
-  delete(id: string) {
-    if (confirm('Tem certeza que deseja excluir este audiolivro?')) {
+  async delete(id: string) {
+    const confirmed = await this.modal.confirm('Excluir Audiolivro', 'Tem certeza que deseja excluir este audiolivro?');
+    if (confirmed) {
       this.api.deleteAudiobook(id).subscribe(() => {
         this.toast.show('Audiolivro excluído');
         this.load();

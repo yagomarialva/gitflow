@@ -28,6 +28,13 @@ import (
 // SearchYouTube searches YouTube using a priority chain:
 // chromedp → yt-dlp → iTunes fallback.
 func SearchYouTube(query string, searchType string) []models.SearchResult {
+	// If the query is an absolute HTTP/HTTPS URL, directly resolve it
+	if strings.HasPrefix(query, "http://") || strings.HasPrefix(query, "https://") {
+		if results, err := resolveURL(query, searchType); err == nil && len(results) > 0 {
+			return results
+		}
+	}
+
 	// If query is a YouTube search URL, extract the actual query parameter
 	if strings.Contains(query, "youtube.com/results") {
 		if u, err := url.Parse(query); err == nil {
@@ -442,4 +449,167 @@ func parseDurationStr(s string) int {
 		total = total*60 + n
 	}
 	return total
+}
+
+func cleanPlaylistURL(urlStr string) string {
+	if u, err := url.Parse(urlStr); err == nil {
+		if listID := u.Query().Get("list"); listID != "" {
+			return "https://www.youtube.com/playlist?list=" + listID
+		}
+	}
+	return urlStr
+}
+
+func resolveURL(query string, searchType string) ([]models.SearchResult, error) {
+	u, err := url.Parse(query)
+	if err != nil {
+		return nil, err
+	}
+
+	hostname := strings.ToLower(u.Hostname())
+	isYouTube := strings.Contains(hostname, "youtube.com") || strings.Contains(hostname, "youtu.be")
+
+	// 1. YouTube Playlist
+	if isYouTube && strings.Contains(query, "list=") && !strings.Contains(query, "watch?v=") {
+		if searchType == "playlist" {
+			title := "YouTube Playlist"
+			cmd := exec.Command("yt-dlp", query, "--playlist-end", "1", "--dump-json", "--flat-playlist")
+			if out, err := cmd.Output(); err == nil {
+				var info struct {
+					PlaylistTitle string `json:"playlist_title"`
+					Playlist      string `json:"playlist"`
+				}
+				if json.Unmarshal(out, &info) == nil {
+					if info.PlaylistTitle != "" {
+						title = info.PlaylistTitle
+					} else if info.Playlist != "" {
+						title = info.Playlist
+					}
+				}
+			}
+			return []models.SearchResult{{
+				ID:           uuid.New().String(),
+				Title:        title,
+				Artist:       "YouTube Playlist",
+				ThumbnailURL: "",
+				Duration:     0,
+				SourceURL:    query,
+				FileSize:     "Playlist",
+			}}, nil
+		}
+
+		cmd := exec.Command("yt-dlp", query, "--dump-json", "--flat-playlist", "--quiet")
+		out, err := cmd.Output()
+		if err != nil && len(out) == 0 {
+			return nil, err
+		}
+
+		var results []models.SearchResult
+		dec := json.NewDecoder(strings.NewReader(string(out)))
+		for dec.More() {
+			var e ytDlpEntry
+			if err := dec.Decode(&e); err != nil {
+				continue
+			}
+			artist, song := splitArtistTitle(e.Title)
+			if e.Channel != "" && artist == "" {
+				artist = e.Channel
+			} else if e.Uploader != "" && artist == "" {
+				artist = e.Uploader
+			}
+			urlStr := e.WebpageURL
+			if urlStr == "" && e.ID != "" {
+				urlStr = "https://www.youtube.com/watch?v=" + e.ID
+			}
+			results = append(results, models.SearchResult{
+				ID:           uuid.New().String(),
+				Title:        song,
+				Artist:       artist,
+				ThumbnailURL: e.Thumbnail,
+				Duration:     int(e.Duration),
+				SourceURL:    urlStr,
+				FileSize:     "~4-8 MB",
+			})
+		}
+		return results, nil
+	}
+
+	// 2. YouTube Single Video
+	if isYouTube {
+		cmd := exec.Command("yt-dlp", query, "--dump-json", "--no-download", "--skip-download", "--quiet")
+		out, err := cmd.Output()
+		if err != nil {
+			return nil, err
+		}
+		var e ytDlpEntry
+		if err := json.Unmarshal(out, &e); err != nil {
+			return nil, err
+		}
+		artist, song := splitArtistTitle(e.Title)
+		if e.Channel != "" && artist == "" {
+			artist = e.Channel
+		} else if e.Uploader != "" && artist == "" {
+			artist = e.Uploader
+		}
+		urlStr := e.WebpageURL
+		if urlStr == "" && e.ID != "" {
+			urlStr = "https://www.youtube.com/watch?v=" + e.ID
+		}
+		return []models.SearchResult{{
+			ID:           uuid.New().String(),
+			Title:        song,
+			Artist:       artist,
+			ThumbnailURL: e.Thumbnail,
+			Duration:     int(e.Duration),
+			SourceURL:    urlStr,
+			FileSize:     "~4-8 MB",
+		}}, nil
+	}
+
+	// 3. Direct Audio File (e.g. .mp3, .ogg, .wav, .m4a)
+	pathLower := strings.ToLower(u.Path)
+	if strings.HasSuffix(pathLower, ".mp3") || strings.HasSuffix(pathLower, ".ogg") || strings.HasSuffix(pathLower, ".wav") || strings.HasSuffix(pathLower, ".m4a") {
+		parts := strings.Split(u.Path, "/")
+		title := "Audio File"
+		if len(parts) > 0 {
+			title = parts[len(parts)-1]
+		}
+		return []models.SearchResult{{
+			ID:           uuid.New().String(),
+			Title:        title,
+			Artist:       "Link Direto",
+			ThumbnailURL: "",
+			Duration:     0,
+			SourceURL:    query,
+			FileSize:     "Desconhecido",
+		}}, nil
+	}
+
+	// 4. Direct ZIP File
+	if strings.HasSuffix(pathLower, ".zip") {
+		parts := strings.Split(u.Path, "/")
+		title := "Audio ZIP"
+		if len(parts) > 0 {
+			title = parts[len(parts)-1]
+		}
+		return []models.SearchResult{{
+			ID:           uuid.New().String(),
+			Title:        title,
+			Artist:       "Arquivo ZIP",
+			ThumbnailURL: "",
+			Duration:     0,
+			SourceURL:    query,
+			FileSize:     "Zip",
+		}}, nil
+	}
+
+	// 5. Podcast RSS feed
+	if strings.HasSuffix(pathLower, ".xml") || strings.Contains(pathLower, "feed") || strings.Contains(pathLower, "rss") || strings.Contains(pathLower, "podcast") {
+		_, scrapedTracks, err := ScrapePodcastRSS(query)
+		if err == nil && len(scrapedTracks) > 0 {
+			return scrapedTracks, nil
+		}
+	}
+
+	return nil, fmt.Errorf("unsupported URL format")
 }

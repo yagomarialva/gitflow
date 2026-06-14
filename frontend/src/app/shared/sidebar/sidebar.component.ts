@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/services/api.service';
 import { ToastService } from '../../core/services/toast.service';
 import { WebsocketService } from '../../core/services/websocket.service';
+import { ModalService } from '../../core/services/modal.service';
 import { Playlist } from '../../models/interfaces';
 
 @Component({
@@ -221,7 +222,7 @@ export class SidebarComponent implements OnInit {
   editId: string | null = null;
   editName = '';
 
-  constructor(private api: ApiService, private toast: ToastService, private router: Router, private ws: WebsocketService) {}
+  constructor(private api: ApiService, private toast: ToastService, private router: Router, private ws: WebsocketService, private modal: ModalService) {}
 
   ngOnInit() { 
     this.load(); 
@@ -272,9 +273,10 @@ export class SidebarComponent implements OnInit {
     }
   }
 
-  deletePlaylist(p: Playlist, ev: Event) {
+  async deletePlaylist(p: Playlist, ev: Event) {
     ev.stopPropagation();
-    if (confirm(`Excluir playlist "${p.name}"?`)) {
+    const confirmed = await this.modal.confirm('Excluir Playlist', `Deseja realmente excluir a playlist "${p.name}"?`);
+    if (confirmed) {
       this.api.deletePlaylist(p.id).subscribe({
         next: () => { this.toast.show('Playlist excluída'); this.load(); if (this.isActive('/playlist/'+p.id)) this.nav('/library'); },
         error: () => this.toast.show('Erro ao excluir', 'error')

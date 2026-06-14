@@ -7,11 +7,12 @@ import { ToastService } from './core/services/toast.service';
 import { SidebarComponent } from './shared/sidebar/sidebar.component';
 import { PlayerBarComponent } from './shared/player-bar/player-bar.component';
 import { ToastComponent } from './shared/toast/toast.component';
+import { ModalComponent } from './shared/modal/modal.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, SidebarComponent, PlayerBarComponent, ToastComponent],
+  imports: [CommonModule, RouterOutlet, SidebarComponent, PlayerBarComponent, ToastComponent, ModalComponent],
   template: `
     <div class="shell">
       <!-- Backdrop for mobile sidebar -->
@@ -40,6 +41,7 @@ import { ToastComponent } from './shared/toast/toast.component';
     </div>
     <app-player-bar class="shell__player" />
     <app-toast />
+    <app-modal />
   `,
   styles: [`
     :host { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }

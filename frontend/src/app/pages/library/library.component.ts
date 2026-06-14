@@ -1,15 +1,17 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/services/api.service';
 import { PlayerService } from '../../core/services/player.service';
 import { ToastService } from '../../core/services/toast.service';
 import { WebsocketService } from '../../core/services/websocket.service';
+import { ModalService } from '../../core/services/modal.service';
 import { Track, Playlist } from '../../models/interfaces';
 
 @Component({
   selector: 'app-library',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   template: `
     <div class="page">
       <h1 class="page__title">Biblioteca</h1>
@@ -17,9 +19,12 @@ import { Track, Playlist } from '../../models/interfaces';
       <table class="track-table" *ngIf="tracks.length">
         <thead>
           <tr>
+            <th class="track-table__checkbox" style="width: 40px; text-align: center;">
+              <input type="checkbox" class="checkbox-custom" [checked]="isAllSelected()" (change)="toggleSelectAll()">
+            </th>
             <th class="track-table__num">#</th>
-            <th>Título</th>
-            <th>Qualidade</th>
+            <th class="track-table__info-header">Título</th>
+            <th class="track-table__quality-header">Qualidade</th>
             <th class="track-table__dur">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             </th>
@@ -28,11 +33,14 @@ import { Track, Playlist } from '../../models/interfaces';
         </thead>
         <tbody>
           <tr *ngFor="let t of tracks; let i = index" class="track-row" [class.is-playing]="playingId === t.id" (click)="play(t)">
+            <td class="track-table__checkbox" style="width: 40px; text-align: center;" (click)="$event.stopPropagation()">
+              <input type="checkbox" class="checkbox-custom" [checked]="selectedTracks.has(t.id)" (change)="toggleSelect(t.id)">
+            </td>
             <td class="track-table__num">
               <span *ngIf="playingId !== t.id">{{ i + 1 }}</span>
               <svg *ngIf="playingId === t.id" width="14" height="14" viewBox="0 0 24 24" fill="var(--accent)"><polygon points="5 3 19 12 5 21 5 3"/></svg>
             </td>
-            <td>
+            <td class="track-table__info">
               <div style="display:flex;align-items:center;gap:12px">
                 <img [src]="t.thumbnail_url" [alt]="t.title" class="track-table__thumb" *ngIf="t.thumbnail_url">
                 <div class="track-table__thumb" *ngIf="!t.thumbnail_url" style="display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--text-muted)">♪</div>
@@ -42,11 +50,11 @@ import { Track, Playlist } from '../../models/interfaces';
                 </div>
               </div>
             </td>
-            <td>
+            <td class="track-table__quality">
               <span class="badge">{{ t.storage_type === 'mp3_zip' ? 'Alta Compressão (ZIP)' : 'MP3' }}</span>
             </td>
             <td class="track-table__dur">{{ format(t.duration) }}</td>
-            <td class="track-table__actions" style="position:relative; display:flex; gap: 4px; align-items:center; justify-content:flex-end; padding-right: 24px; padding-top: 12px;">
+            <td class="track-table__actions" style="position:relative; display:flex; gap: 4px; align-items:center; justify-content:flex-end; padding-right: 24px; padding-top: 12px;" (click)="$event.stopPropagation()">
               <a [href]="api.streamUrl(t.id)" download class="btn-icon" title="Baixar MP3 / Salvar local" (click)="$event.stopPropagation()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               </a>
@@ -72,6 +80,40 @@ import { Track, Playlist } from '../../models/interfaces';
           </tr>
         </tbody>
       </table>
+
+      <!-- Floating Bulk Action Bar -->
+      <div class="bulk-bar" *ngIf="selectedTracks.size > 0">
+        <span class="bulk-bar__count">{{ selectedTracks.size }} música(s) selecionada(s)</span>
+        <div class="bulk-bar__actions">
+          <button class="btn btn-outline" (click)="openBulkEdit()">Editar em Lote</button>
+          <button class="btn btn-outline" style="border-color:#ff4444; color:#ff4444" (click)="bulkDelete()">Excluir</button>
+          <button class="btn btn-accent" (click)="clearSelection()">Cancelar</button>
+        </div>
+      </div>
+
+      <!-- Bulk Edit Modal -->
+      <div class="modal-overlay" *ngIf="showBulkEditModal" (click)="showBulkEditModal = false">
+        <div class="modal" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h3>Editar em Lote</h3>
+            <button class="btn-icon" (click)="showBulkEditModal = false">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="modal-body">
+            <div style="display:flex; flex-direction:column; gap:16px;">
+              <div>
+                <label style="display:block; margin-bottom:8px; font-weight:600; color:var(--text-sub);">Novo Artista</label>
+                <input class="input" [(ngModel)]="bulkArtist" placeholder="Deixe em branco para não alterar" (keyup.enter)="saveBulkEdit()">
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline" (click)="showBulkEditModal = false">Cancelar</button>
+            <button class="btn btn-accent" (click)="saveBulkEdit()">Salvar</button>
+          </div>
+        </div>
+      </div>
 
       <div class="empty" *ngIf="!loading && !tracks.length">
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
@@ -133,11 +175,17 @@ export class LibraryComponent implements OnInit {
   playingId: string | null = null;
   activeMenu: string | null = null;
 
+  // Selection states
+  selectedTracks = new Set<string>();
+  showBulkEditModal = false;
+  bulkArtist = '';
+
   constructor(
     public api: ApiService,
     private ps: PlayerService,
     private toast: ToastService,
-    private ws: WebsocketService
+    private ws: WebsocketService,
+    private modal: ModalService
   ) {}
 
   ngOnInit() {
@@ -159,23 +207,28 @@ export class LibraryComponent implements OnInit {
 
   play(t: Track) { this.ps.playTrack(t, this.tracks); }
 
-  remove(t: Track, ev: Event) {
+  async remove(t: Track, ev: Event) {
     ev.stopPropagation();
     this.activeMenu = null;
-    if (confirm(`Excluir "${t.title}" da biblioteca?`)) {
+    const confirmed = await this.modal.confirm('Excluir Música', `Deseja realmente excluir "${t.title}" da biblioteca?`);
+    if (confirmed) {
       this.api.deleteTrack(t.id).subscribe({
-        next: () => { this.tracks = this.tracks.filter(x => x.id !== t.id); this.toast.show('Removida da biblioteca'); },
+        next: () => { 
+          this.tracks = this.tracks.filter(x => x.id !== t.id); 
+          this.selectedTracks.delete(t.id);
+          this.toast.show('Removida da biblioteca'); 
+        },
         error: () => this.toast.show('Erro ao remover', 'error')
       });
     }
   }
 
-  edit(t: Track, ev: Event) {
+  async edit(t: Track, ev: Event) {
     ev.stopPropagation();
     this.activeMenu = null;
-    const newTitle = prompt('Editar Título da Música:', t.title);
+    const newTitle = await this.modal.prompt('Editar Música', 'Editar Título da Música:', t.title);
     if (newTitle === null) return;
-    const newArtist = prompt('Editar Artista da Música:', t.artist);
+    const newArtist = await this.modal.prompt('Editar Música', 'Editar Artista da Música:', t.artist);
     if (newArtist === null) return;
     
     this.api.updateTrack(t.id, newTitle, newArtist).subscribe({
@@ -202,4 +255,114 @@ export class LibraryComponent implements OnInit {
   }
 
   format(s: number) { return this.ps.format(s); }
+
+  // Selection methods
+  isAllSelected(): boolean {
+    return this.tracks.length > 0 && this.selectedTracks.size === this.tracks.length;
+  }
+
+  toggleSelectAll() {
+    if (this.isAllSelected()) {
+      this.selectedTracks.clear();
+    } else {
+      this.tracks.forEach(t => this.selectedTracks.add(t.id));
+    }
+  }
+
+  toggleSelect(id: string) {
+    if (this.selectedTracks.has(id)) {
+      this.selectedTracks.delete(id);
+    } else {
+      this.selectedTracks.add(id);
+    }
+  }
+
+  clearSelection() {
+    this.selectedTracks.clear();
+  }
+
+  openBulkEdit() {
+    this.bulkArtist = '';
+    this.showBulkEditModal = true;
+  }
+
+  saveBulkEdit() {
+    const ids = Array.from(this.selectedTracks);
+    if (ids.length === 0) return;
+
+    this.showBulkEditModal = false;
+    const artist = this.bulkArtist.trim();
+    if (!artist) {
+      this.toast.show('Digite um nome de artista válido', 'info');
+      return;
+    }
+
+    let successCount = 0;
+    let errorCount = 0;
+    const promises = ids.map(id => {
+      const track = this.tracks.find(t => t.id === id);
+      const title = track ? track.title : '';
+      return new Promise<void>((resolve) => {
+        this.api.updateTrack(id, title, artist).subscribe({
+          next: () => {
+            successCount++;
+            if (track) {
+              track.artist = artist;
+            }
+            resolve();
+          },
+          error: () => {
+            errorCount++;
+            resolve();
+          }
+        });
+      });
+    });
+
+    Promise.all(promises).then(() => {
+      if (successCount > 0) {
+        this.toast.show(`${successCount} música(s) atualizada(s)`, 'success');
+      }
+      if (errorCount > 0) {
+        this.toast.show(`Erro ao atualizar ${errorCount} música(s)`, 'error');
+      }
+      this.clearSelection();
+    });
+  }
+
+  async bulkDelete() {
+    const ids = Array.from(this.selectedTracks);
+    if (ids.length === 0) return;
+
+    const confirmed = await this.modal.confirm('Excluir Músicas', `Deseja realmente excluir as ${ids.length} música(s) selecionada(s) da biblioteca?`);
+    if (!confirmed) return;
+
+    let successCount = 0;
+    let errorCount = 0;
+    const promises = ids.map(id => {
+      return new Promise<void>((resolve) => {
+        this.api.deleteTrack(id).subscribe({
+          next: () => {
+            successCount++;
+            this.tracks = this.tracks.filter(t => t.id !== id);
+            resolve();
+          },
+          error: () => {
+            errorCount++;
+            resolve();
+          }
+        });
+      });
+    });
+
+    Promise.all(promises).then(() => {
+      if (successCount > 0) {
+        this.toast.show(`${successCount} música(s) excluída(s)`, 'success');
+      }
+      if (errorCount > 0) {
+        this.toast.show(`Erro ao excluir ${errorCount} música(s)`, 'error');
+      }
+      this.clearSelection();
+    });
+  }
 }

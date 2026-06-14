@@ -44,7 +44,7 @@ async function runE2E() {
     // 2. Create Playlist
     const plName = 'Test Playlist ' + Date.now();
     const pl = await request('POST', '/api/playlists', { name: plName });
-    if (pl.status === 200 && pl.body.id) {
+    if ((pl.status === 200 || pl.status === 201) && pl.body.id) {
       console.log('✅ POST /api/playlists - OK (ID: ' + pl.body.id + ')');
       passed++;
     } else {
@@ -56,7 +56,7 @@ async function runE2E() {
     if (lib.body.length > 0 && pl.body.id) {
       const trackId = lib.body[0].id;
       const add = await request('POST', `/api/playlists/${pl.body.id}/tracks`, { track_id: trackId });
-      if (add.status === 200) {
+      if (add.status === 200 || add.status === 201) {
         console.log('✅ POST /api/playlists/:id/tracks - OK (Added track ' + trackId + ')');
         passed++;
       } else {

@@ -22,6 +22,7 @@ import { SearchResult } from '../../models/interfaces';
           name="query"
           [(ngModel)]="query" 
           placeholder="O que você quer ouvir? (Nome da música ou link do YouTube)"
+          (paste)="onPaste($event)"
           autofocus
         >
         <select class="search-box__select" name="type" [(ngModel)]="searchType">
@@ -254,9 +255,24 @@ export class SearchComponent {
 
   constructor(private api: ApiService, private toast: ToastService) {}
 
+  onPaste(event: ClipboardEvent) {
+    const clipboardData = event.clipboardData || (window as any).clipboardData;
+    const pastedText = clipboardData?.getData('text') || '';
+    const trimmed = pastedText.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      event.preventDefault();
+      this.query = trimmed;
+      setTimeout(() => {
+        this.search();
+      }, 50);
+    }
+  }
+
   search() {
     let q = this.query.trim();
     if (!q || this.loading) return;
+
+    const isUrl = q.startsWith('http://') || q.startsWith('https://');
 
     if (q.includes('youtube.com/') && q.includes('list=')) {
       this.searchType = 'playlist';
@@ -265,23 +281,38 @@ export class SearchComponent {
     }
     
     this.loading = true;
-    this.searched = true;
+    this.searched = !isUrl;
     this.lastQuery = q;
     this.results = [];
 
     this.api.search(q, this.searchType).subscribe({
       next: r => {
-        this.results = r || [];
         this.loading = false;
-        if (this.results.length === 0) {
-          this.toast.show('Nenhum resultado encontrado.', 'info');
+        const resolved = r || [];
+        
+        if (isUrl) {
+          if (resolved.length === 0) {
+            this.toast.show('Não foi possível resolver o link fornecido.', 'error');
+          } else {
+            this.toast.show(`Link resolvido! Iniciando download de ${resolved.length} item(ns)...`, 'success');
+            resolved.forEach(item => {
+              this.download(item);
+            });
+            this.query = '';
+            this.results = [];
+          }
         } else {
-          this.toast.show(`${this.results.length} resultados encontrados.`, 'success');
+          this.results = resolved;
+          if (this.results.length === 0) {
+            this.toast.show('Nenhum resultado encontrado.', 'info');
+          } else {
+            this.toast.show(`${this.results.length} resultados encontrados.`, 'success');
+          }
         }
       },
       error: (err) => { 
         this.loading = false; 
-        this.toast.show('Erro na busca. Tente novamente.', 'error');
+        this.toast.show(isUrl ? 'Erro ao resolver o link.' : 'Erro na busca. Tente novamente.', 'error');
         console.error('Search error:', err);
       }
     });

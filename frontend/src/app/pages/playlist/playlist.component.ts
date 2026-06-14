@@ -1,15 +1,17 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute } from '@angular/router';
+import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, RouterModule } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 import { PlayerService } from '../../core/services/player.service';
 import { ToastService } from '../../core/services/toast.service';
+import { ModalService } from '../../core/services/modal.service';
 import { Playlist, Track } from '../../models/interfaces';
 
 @Component({
   selector: 'app-playlist',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule, RouterModule],
   template: `
     <div class="page" style="padding:0">
       
@@ -25,7 +27,6 @@ import { Playlist, Track } from '../../models/interfaces';
         </div>
       </div>
 
-      <!-- Actions -->
       <!-- Actions -->
       <div class="actions" *ngIf="pl">
         <button class="btn-play-all" (click)="playAll()" title="Tocar Playlist" *ngIf="tracks.length">
@@ -44,9 +45,12 @@ import { Playlist, Track } from '../../models/interfaces';
         <table class="track-table">
           <thead>
             <tr>
+              <th class="track-table__checkbox" style="width: 40px; text-align: center;">
+                <input type="checkbox" class="checkbox-custom" [checked]="isAllSelected()" (change)="toggleSelectAll()">
+              </th>
               <th class="track-table__num">#</th>
-              <th>Título</th>
-              <th>Qualidade</th>
+              <th class="track-table__info-header">Título</th>
+              <th class="track-table__quality-header">Qualidade</th>
               <th class="track-table__dur">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               </th>
@@ -55,11 +59,14 @@ import { Playlist, Track } from '../../models/interfaces';
           </thead>
           <tbody>
             <tr *ngFor="let t of tracks; let i = index" class="track-row" [class.is-playing]="playingId === t.id" (click)="play(t)">
+              <td class="track-table__checkbox" style="width: 40px; text-align: center;" (click)="$event.stopPropagation()">
+                <input type="checkbox" class="checkbox-custom" [checked]="selectedTracks.has(t.id)" (change)="toggleSelect(t.id)">
+              </td>
               <td class="track-table__num">
                 <span *ngIf="playingId !== t.id">{{ i + 1 }}</span>
                 <svg *ngIf="playingId === t.id" width="14" height="14" viewBox="0 0 24 24" fill="var(--accent)"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               </td>
-              <td>
+              <td class="track-table__info">
                 <div style="display:flex;align-items:center;gap:12px">
                   <img [src]="t.thumbnail_url" [alt]="t.title" class="track-table__thumb" *ngIf="t.thumbnail_url">
                   <div class="track-table__thumb" *ngIf="!t.thumbnail_url" style="display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--text-muted)">♪</div>
@@ -69,11 +76,11 @@ import { Playlist, Track } from '../../models/interfaces';
                   </div>
                 </div>
               </td>
-              <td>
+              <td class="track-table__quality">
                 <span class="badge">{{ t.storage_type === 'mp3_zip' ? 'Alta Compressão (ZIP)' : 'MP3' }}</span>
               </td>
               <td class="track-table__dur">{{ format(t.duration) }}</td>
-              <td class="track-table__actions" style="display:flex; gap: 4px; align-items:center; justify-content:flex-end; padding-right: 24px; padding-top: 12px;">
+              <td class="track-table__actions" style="display:flex; gap: 4px; align-items:center; justify-content:flex-end; padding-right: 24px; padding-top: 12px;" (click)="$event.stopPropagation()">
                 <a [href]="api.streamUrl(t.id)" download class="btn-icon" title="Baixar MP3 / Salvar local" (click)="$event.stopPropagation()">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 </a>
@@ -87,6 +94,16 @@ import { Playlist, Track } from '../../models/interfaces';
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- Floating Bulk Action Bar -->
+      <div class="bulk-bar" *ngIf="selectedTracks.size > 0">
+        <span class="bulk-bar__count">{{ selectedTracks.size }} música(s) selecionada(s)</span>
+        <div class="bulk-bar__actions">
+          <button class="btn btn-outline" style="border-color:#ff9900; color:#ff9900" (click)="bulkRemove()">Remover da Playlist</button>
+          <button class="btn btn-outline" style="border-color:#ff4444; color:#ff4444" (click)="bulkDelete()">Excluir da Biblioteca</button>
+          <button class="btn btn-accent" (click)="clearSelection()">Cancelar</button>
+        </div>
       </div>
 
       <div class="empty" *ngIf="!loading && !tracks.length && pl">
@@ -281,11 +298,15 @@ export class PlaylistComponent implements OnInit {
   showModal = false;
   currentId: string | null = null;
 
+  // Selection states
+  selectedTracks = new Set<string>();
+
   constructor(
     private route: ActivatedRoute,
     public api: ApiService,
     private ps: PlayerService,
-    private toast: ToastService
+    private toast: ToastService,
+    private modal: ModalService
   ) {}
 
   ngOnInit() {
@@ -293,6 +314,7 @@ export class PlaylistComponent implements OnInit {
       const id = params.get('id');
       if (id) {
         this.currentId = id;
+        this.clearSelection();
         this.load(id);
       }
     });
@@ -350,20 +372,27 @@ export class PlaylistComponent implements OnInit {
   playAll() { if (this.tracks.length) this.ps.playTrack(this.tracks[0], this.tracks); }
   play(t: Track) { this.ps.playTrack(t, this.tracks); }
   
-  remove(t: Track, ev: Event) {
+  async remove(t: Track, ev: Event) {
     ev.stopPropagation();
     if (!this.pl) return;
-    this.api.removeFromPlaylist(this.pl.id, t.id).subscribe({
-      next: () => { this.tracks = this.tracks.filter(x => x.id !== t.id); this.toast.show('Removida da playlist'); },
-      error: () => this.toast.show('Erro ao remover', 'error')
-    });
+    const confirmed = await this.modal.confirm('Remover da Playlist', `Deseja realmente remover "${t.title}" desta playlist?`);
+    if (confirmed) {
+      this.api.removeFromPlaylist(this.pl.id, t.id).subscribe({
+        next: () => { 
+          this.tracks = this.tracks.filter(x => x.id !== t.id); 
+          this.selectedTracks.delete(t.id);
+          this.toast.show('Removida da playlist'); 
+        },
+        error: () => this.toast.show('Erro ao remover', 'error')
+      });
+    }
   }
 
-  edit(t: Track, ev: Event) {
+  async edit(t: Track, ev: Event) {
     ev.stopPropagation();
-    const newTitle = prompt('Editar Título da Música:', t.title);
+    const newTitle = await this.modal.prompt('Editar Música', 'Editar Título da Música:', t.title);
     if (newTitle === null) return;
-    const newArtist = prompt('Editar Artista da Música:', t.artist);
+    const newArtist = await this.modal.prompt('Editar Música', 'Editar Artista da Música:', t.artist);
     if (newArtist === null) return;
     
     this.api.updateTrack(t.id, newTitle, newArtist).subscribe({
@@ -377,4 +406,101 @@ export class PlaylistComponent implements OnInit {
   }
 
   format(s: number) { return this.ps.format(s); }
+
+  // Selection methods
+  isAllSelected(): boolean {
+    return this.tracks.length > 0 && this.selectedTracks.size === this.tracks.length;
+  }
+
+  toggleSelectAll() {
+    if (this.isAllSelected()) {
+      this.selectedTracks.clear();
+    } else {
+      this.tracks.forEach(t => this.selectedTracks.add(t.id));
+    }
+  }
+
+  toggleSelect(id: string) {
+    if (this.selectedTracks.has(id)) {
+      this.selectedTracks.delete(id);
+    } else {
+      this.selectedTracks.add(id);
+    }
+  }
+
+  clearSelection() {
+    this.selectedTracks.clear();
+  }
+
+  async bulkRemove() {
+    const ids = Array.from(this.selectedTracks);
+    if (ids.length === 0 || !this.pl) return;
+
+    const confirmed = await this.modal.confirm('Remover da Playlist', `Deseja realmente remover as ${ids.length} música(s) selecionada(s) desta playlist?`);
+    if (!confirmed) return;
+
+    let successCount = 0;
+    let errorCount = 0;
+    const promises = ids.map(id => {
+      return new Promise<void>((resolve) => {
+        this.api.removeFromPlaylist(this.pl!.id, id).subscribe({
+          next: () => {
+            successCount++;
+            this.tracks = this.tracks.filter(t => t.id !== id);
+            resolve();
+          },
+          error: () => {
+            errorCount++;
+            resolve();
+          }
+        });
+      });
+    });
+
+    Promise.all(promises).then(() => {
+      if (successCount > 0) {
+        this.toast.show(`${successCount} música(s) removida(s)`, 'success');
+      }
+      if (errorCount > 0) {
+        this.toast.show(`Erro ao remover ${errorCount} música(s)`, 'error');
+      }
+      this.clearSelection();
+    });
+  }
+
+  async bulkDelete() {
+    const ids = Array.from(this.selectedTracks);
+    if (ids.length === 0) return;
+
+    const confirmed = await this.modal.confirm('Excluir Músicas', `Deseja realmente excluir as ${ids.length} música(s) selecionada(s) da biblioteca e de todas as playlists?`);
+    if (!confirmed) return;
+
+    let successCount = 0;
+    let errorCount = 0;
+    const promises = ids.map(id => {
+      return new Promise<void>((resolve) => {
+        this.api.deleteTrack(id).subscribe({
+          next: () => {
+            successCount++;
+            this.tracks = this.tracks.filter(t => t.id !== id);
+            resolve();
+          },
+          error: () => {
+            errorCount++;
+            resolve();
+          }
+        });
+      });
+    });
+
+    Promise.all(promises).then(() => {
+      if (successCount > 0) {
+        this.toast.show(`${successCount} música(s) excluída(s)`, 'success');
+      }
+      if (errorCount > 0) {
+        this.toast.show(`Erro ao excluir ${errorCount} música(s)`, 'error');
+      }
+      this.clearSelection();
+    });
+  }
 }

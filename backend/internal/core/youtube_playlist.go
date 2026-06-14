@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -52,7 +53,7 @@ func ScrapeYouTubePlaylist(ctx context.Context, playlistURL string) (models.Play
 
 	// JS to extract all tracks currently loaded
 	extractScript := `
-	(function() {
+	JSON.stringify((function() {
 		const items = [];
 		const renderers = document.querySelectorAll('ytd-playlist-video-renderer');
 		renderers.forEach((r) => {
@@ -69,7 +70,7 @@ func ScrapeYouTubePlaylist(ctx context.Context, playlistURL string) (models.Play
 			});
 		});
 		return items;
-	})()
+	})())
 	`
 
 	// Step 1: Navigate and wait for first content
@@ -108,10 +109,15 @@ func ScrapeYouTubePlaylist(ctx context.Context, playlistURL string) (models.Play
 	}
 
 	// Step 4: Extract all loaded tracks
+	var resultJSON string
 	if err := chromedp.Run(timeoutCtx,
-		chromedp.Evaluate(extractScript, &rawItems),
+		chromedp.Evaluate(extractScript, &resultJSON),
 	); err != nil {
 		return models.Playlist{}, nil, fmt.Errorf("chromedp extract tracks: %w", err)
+	}
+
+	if err := json.Unmarshal([]byte(resultJSON), &rawItems); err != nil {
+		return models.Playlist{}, nil, fmt.Errorf("unmarshal tracks: %w", err)
 	}
 
 	playlist := models.Playlist{
