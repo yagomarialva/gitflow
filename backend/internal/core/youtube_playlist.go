@@ -5,119 +5,39 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
+	"os/exec"
+	"strings"
 	"time"
 
 	"ares-backend/internal/models"
 
-	"github.com/chromedp/chromedp"
 	"github.com/google/uuid"
 )
 
-type ytPlaylistTrack struct {
-	Title     string `json:"title"`
-	URL       string `json:"url"`
-	Duration  string `json:"duration"`
-	Thumbnail string `json:"thumbnail"`
-}
-
-// ScrapeYouTubePlaylist scrapes a YouTube playlist URL bypassing lazy loading using chromedp.
+// ScrapeYouTubePlaylist fetches playlist tracks using yt-dlp instead of chromedp for better reliability.
 func ScrapeYouTubePlaylist(ctx context.Context, playlistURL string) (models.Playlist, []models.SearchResult, error) {
-	opts := []chromedp.ExecAllocatorOption{
-		chromedp.NoFirstRun,
-		chromedp.NoDefaultBrowserCheck,
-		chromedp.Headless,
-		chromedp.DisableGPU,
-		chromedp.Flag("no-sandbox", true),
-		chromedp.Flag("disable-dev-shm-usage", true),
-		chromedp.Flag("disable-setuid-sandbox", true),
-		chromedp.Flag("disable-extensions", true),
-		chromedp.Flag("mute-audio", true),
-	}
-
-	if chromePath := os.Getenv("CHROME_BIN"); chromePath != "" {
-		opts = append(opts, chromedp.ExecPath(chromePath))
-	}
-
-	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
-	defer cancel()
-
-	chromeCtx, cancel2 := chromedp.NewContext(allocCtx)
-	defer cancel2()
-
-	timeoutCtx, cancel3 := context.WithTimeout(chromeCtx, 120*time.Second) // Up to 120s for navigation, rendering, and scrolling
-	defer cancel3()
-
-	var playlistName string
-	var rawItems []ytPlaylistTrack
-
-	// JS to extract all tracks currently loaded
-	extractScript := `
-	JSON.stringify((function() {
-		const items = [];
-		const renderers = document.querySelectorAll('ytd-playlist-video-renderer');
-		renderers.forEach((r) => {
-			const title = r.querySelector('#video-title');
-			const duration = r.querySelector('ytd-thumbnail-overlay-time-status-renderer span');
-			const thumb = r.querySelector('ytd-thumbnail img');
-			if (!title) return;
-			
-			items.push({
-				title: title.textContent.trim(),
-				url: 'https://www.youtube.com' + (title.getAttribute('href') || ''),
-				duration: duration ? duration.textContent.trim() : '',
-				thumbnail: thumb ? (thumb.getAttribute('src') || thumb.getAttribute('data-thumb') || '') : '',
-			});
-		});
-		return items;
-	})())
-	`
-
-	// Step 1: Navigate and wait for first content
-	err := chromedp.Run(timeoutCtx,
-		chromedp.Navigate(playlistURL),
-		chromedp.WaitVisible(`ytd-playlist-video-renderer`, chromedp.ByQuery),
-	)
-	if err != nil {
-		return models.Playlist{}, nil, fmt.Errorf("chromedp run: %w", err)
-	}
-
-	// Step 2: Scroll down in a Go-side loop to trigger lazy loading
-	var lastHeight int
-	staleCount := 0
-	for staleCount < 4 {
-		var newHeight int
-		if err := chromedp.Run(timeoutCtx,
-			chromedp.Evaluate(`window.scrollBy(0, 2000); document.documentElement.scrollHeight`, &newHeight),
-		); err != nil {
-			break
+	// 1. Get playlist title
+	playlistName := "YouTube Playlist"
+	cmdTitle := exec.CommandContext(ctx, "yt-dlp", playlistURL, "--playlist-end", "1", "--dump-json", "--flat-playlist")
+	if out, err := cmdTitle.Output(); err == nil {
+		var info struct {
+			PlaylistTitle string `json:"playlist_title"`
+			Playlist      string `json:"playlist"`
 		}
-		if newHeight == lastHeight {
-			staleCount++
-		} else {
-			staleCount = 0
-			lastHeight = newHeight
+		if json.Unmarshal(out, &info) == nil {
+			if info.PlaylistTitle != "" {
+				playlistName = info.PlaylistTitle
+			} else if info.Playlist != "" {
+				playlistName = info.Playlist
+			}
 		}
-		time.Sleep(500 * time.Millisecond)
 	}
 
-	// Step 3: Extract playlist title from document.title
-	if err := chromedp.Run(timeoutCtx,
-		chromedp.Evaluate(`(function(){ var t = document.title || ''; if (t.endsWith(' - YouTube')) { t = t.substring(0, t.length - 10); } return t; })()`, &playlistName),
-	); err != nil {
-		log.Printf("[playlist] failed to extract title: %v", err)
-	}
-
-	// Step 4: Extract all loaded tracks
-	var resultJSON string
-	if err := chromedp.Run(timeoutCtx,
-		chromedp.Evaluate(extractScript, &resultJSON),
-	); err != nil {
-		return models.Playlist{}, nil, fmt.Errorf("chromedp extract tracks: %w", err)
-	}
-
-	if err := json.Unmarshal([]byte(resultJSON), &rawItems); err != nil {
-		return models.Playlist{}, nil, fmt.Errorf("unmarshal tracks: %w", err)
+	// 2. Fetch all tracks
+	cmd := exec.CommandContext(ctx, "yt-dlp", playlistURL, "--dump-json", "--flat-playlist", "--quiet", "--no-warnings")
+	out, err := cmd.Output()
+	if err != nil && len(out) == 0 {
+		return models.Playlist{}, nil, fmt.Errorf("yt-dlp fetch playlist: %w", err)
 	}
 
 	playlist := models.Playlist{
@@ -127,29 +47,43 @@ func ScrapeYouTubePlaylist(ctx context.Context, playlistURL string) (models.Play
 		CreatedAt: time.Now(),
 	}
 
-	if playlist.Name == "" {
-		playlist.Name = "YouTube Playlist"
-	}
-
 	var results []models.SearchResult
-	for i, item := range rawItems {
-		if item.URL == "" || item.Title == "" {
+	dec := json.NewDecoder(strings.NewReader(string(out)))
+	for dec.More() {
+		var e ytDlpEntry
+		if err := dec.Decode(&e); err != nil {
 			continue
 		}
-		if i == 0 {
-			playlist.ThumbnailURL = item.Thumbnail
+		artist, song := splitArtistTitle(e.Title)
+		if e.Channel != "" && artist == "" {
+			artist = e.Channel
+		} else if e.Uploader != "" && artist == "" {
+			artist = e.Uploader
+		}
+		
+		urlStr := e.WebpageURL
+		if urlStr == "" && e.ID != "" {
+			urlStr = "https://www.youtube.com/watch?v=" + e.ID
 		}
 
-		artist, song := splitArtistTitle(item.Title)
+		if song == "" || strings.Contains(song, "[Private video]") || strings.Contains(song, "[Deleted video]") {
+			continue
+		}
+
+		if len(results) == 0 && e.Thumbnail != "" {
+			playlist.ThumbnailURL = e.Thumbnail
+		}
+
 		results = append(results, models.SearchResult{
 			ID:           uuid.New().String(),
 			Title:        song,
 			Artist:       artist,
-			ThumbnailURL: item.Thumbnail,
-			Duration:     parseDurationStr(item.Duration),
-			SourceURL:    item.URL,
+			ThumbnailURL: e.Thumbnail,
+			Duration:     int(e.Duration),
+			SourceURL:    urlStr,
 		})
 	}
 
+	log.Printf("[playlist] Fetched %d tracks for playlist %q", len(results), playlistName)
 	return playlist, results, nil
 }

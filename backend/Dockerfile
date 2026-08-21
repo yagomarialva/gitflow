@@ -31,7 +31,7 @@ RUN apk --no-cache add \
     py3-pip \
     ffmpeg \
     curl \
-    && pip3 install --break-system-packages yt-dlp \
+    && pip3 install -U --break-system-packages yt-dlp \
     && yt-dlp --version
 
 # ── Chromium environment for chromedp ─────────────────────────────────────────
